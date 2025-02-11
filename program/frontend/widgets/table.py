@@ -31,6 +31,8 @@ class TableWidget(QWidget):
             }
         """)
 
+        self.table.setMinimumSize(300,0)
+
         header = self.table.horizontalHeader()
         header.setSectionResizeMode(QHeaderView.Stretch)
 

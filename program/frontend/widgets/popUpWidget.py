@@ -10,7 +10,6 @@ class PopUpWidget:
         msg.setWindowTitle(self.msg_type.capitalize()) 
         msg.setText(self.text)
 
-        # Set icon based on type
         if self.msg_type == "info":
             msg.setIcon(QMessageBox.Information)
             msg.setStandardButtons(QMessageBox.Ok | QMessageBox.Cancel)
