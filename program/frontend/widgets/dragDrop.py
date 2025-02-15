@@ -69,7 +69,7 @@ class DragDropWidget(QLabel):
         self.setText("")
 
     def get_image_files_from_folder(self, folder_path):
-        supported_formats = ('.png', '.jpg', '.jpeg', '.bmp', '.gif', '.tiff')
+        supported_formats = ('.png', '.jpg', '.jpeg', '.bmp', '.gif', '.tiff', '.tif')
         image_files = []
         for root, dirs, files in os.walk(folder_path):
             for file in files:

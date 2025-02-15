@@ -8,7 +8,7 @@ from frontend.widgets.table import TableWidget
 from frontend.widgets.processBar import ProgressBarWidget
 from frontend.widgets.icon import IconButtonWidget
 from frontend.widgets.splitter import SplitterWidget
-from frontend.ui_modelsettings import ModelSettingsDialog
+from frontend.widgets.slider import SliderWidget
 
 class TrainingTab(QWidget):
     def __init__(self):
@@ -17,6 +17,8 @@ class TrainingTab(QWidget):
         layout = QHBoxLayout(self)
 
         self.test_set_visible = True
+        self.first_visible_image = None
+        self.settings_values = None
 
         self.left_container = QWidget()
         self.left_layout = QVBoxLayout(self.left_container)
@@ -59,7 +61,7 @@ class TrainingTab(QWidget):
         self.test_image_drop = DragDropWidget(self, "Drag & Drop Images Here", self.handle_drop)
         self.test_image_drop.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.testing_set_layout.addWidget(self.test_image_drop)
-        self.test_mask_drop = DragDropWidget(self, "Drag & Drop Masks Here", self.handle_drop)
+        self.test_mask_drop = DragDropWidget(self, "Drag & Drop Masks Here (not required)", self.handle_drop)
         self.test_mask_drop.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.testing_set_layout.addWidget(self.test_mask_drop)
 
@@ -118,6 +120,9 @@ class TrainingTab(QWidget):
         self.plot = PlotWidget()
         self.middle_layout.addWidget(self.plot)
 
+        self.image_slider = SliderWidget()
+        self.middle_layout.addWidget(self.image_slider)
+ 
         self.navigation_layout = QHBoxLayout()
         self.left_button = PurpleButton("<")
         self.navigation_layout.addWidget(self.left_button)
@@ -126,7 +131,6 @@ class TrainingTab(QWidget):
         self.middle_layout.addLayout(self.navigation_layout)
         
         self.right_layout = QVBoxLayout(self.right_container)
-        #layout.addLayout(self.right_layout)
 
         self.metrics_table = TableWidget()
         self.right_layout.addWidget(self.metrics_table)
@@ -135,15 +139,24 @@ class TrainingTab(QWidget):
         self.progress_bar.setRange(0, 100)
         self.right_layout.addWidget(self.progress_bar)
 
-        self.download_button = PurpleButton("Download Model")
-        self.right_layout.addWidget(self.download_button)
-        self.download_button.setEnabled(False)
-        self.download_button.setToolTip("Downloads the trained model, so it can be used later or for different applications")  
+        self.download_layout = QHBoxLayout()
         
+        self.download_model_button = PurpleButton("Download Model")
+        self.download_layout.addWidget(self.download_model_button)
+        self.download_model_button.setEnabled(False)
+        self.download_model_button.setToolTip("Downloads the trained model, so it can be used later or for different applications")
+        
+        self.download_weights_button = PurpleButton("Download Weights")
+        self.download_layout.addWidget(self.download_weights_button)
+        self.download_weights_button.setEnabled(False)
+        self.download_weights_button.setToolTip("Downloads the model weights, so it can be used later or for different applications")  
+        
+        self.right_layout.addLayout(self.download_layout)
+
         layout.addWidget(splitter2)
-        #layout.addWidget(splitter)
 
     def handle_drop(self, files, widget=None):
+        self.first_visible_image = files[0]
         if self.controller:
             if widget == self.image_drop:
                 self.controller.load_images(files)
@@ -176,15 +189,27 @@ class TrainingTab(QWidget):
             self.add_testing_set_button.setToolTip("Remove a dedicated testing set")  
 
     def model_settings(self):
-        dialog = ModelSettingsDialog()
+        from frontend.ui_modelsettings import ModelSettingsDialog
+        
+        dialog = ModelSettingsDialog(self, first_visible_image=self.first_visible_image)
+        if self.settings_values is not None:
+            dialog.set_all_widget_values(self.settings_values)
         if dialog.exec_() == QDialog.Accepted:
-            print("Settings Saved")
-
+            self.settings_values = dialog.get_all_widget_values()
+        self.controller.save_settings(self.settings_values)
+            
     def set_controller(self, controller):
         self.controller = controller
         self.train_button.clicked.connect(self.controller.train_networks)
-        self.left_button.clicked.connect(self.controller.navigate_left)
-        self.right_button.clicked.connect(self.controller.navigate_right)
+
+        self.left_button.pressed.connect(self.controller.start_navigate_left)
+        self.left_button.released.connect(self.controller.stop_navigate)
+        self.right_button.pressed.connect(self.controller.start_navigate_right)
+        self.right_button.released.connect(self.controller.stop_navigate)
+
         self.add_testing_set_button.clicked.connect(self.toggle_training_set)
+        self.add_testing_set_button.clicked.connect(controller.toggle_training_set)
         self.model_settings_button.clicked.connect(self.model_settings)
-        self.download_button.clicked.connect(self.controller.save_model)
+        self.download_model_button.clicked.connect(self.controller.download_model)
+        self.download_weights_button.clicked.connect(self.controller.download_weights)
+        self.image_slider.slider.valueChanged.connect(self.controller.move_preview)
