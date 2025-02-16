@@ -7,14 +7,13 @@ import numpy as np
 from sklearn.model_selection import train_test_split
 from frontend.widgets.popUpWidget import PopUpWidget
 from backend.training.trainingProgressCallback import TrainingProgressCallback
-import segmentation_models as sm
 import yolov5 as yol
 from PyQt5.QtWidgets import QFileDialog
 
 from enum import Enum
 
-IMAGE_HEIGHT = 256
-IMAGE_WIDTH = 256
+IMAGE_HEIGHT = 512
+IMAGE_WIDTH = 512
 
 class modelTypes(Enum):
     UNET = 1
@@ -52,9 +51,9 @@ reverse_backbone_mapping = {v: k for k, v in backbone_mapping.items()}
 
 class ModelSettings:
     def __init__(self):
-        self.model_type = modelTypes.UNET
-        self.model_framework = modelFrameworks.KERAS
-        self.model_backbone = modelBackbones.RESNET34
+        self.model_type = modelTypes.UNETPP
+        self.model_framework = modelFrameworks.PYTORCH
+        self.model_backbone = modelBackbones.RESNET50
         self.epochs = 10
         self.val_split = 20
 
@@ -191,7 +190,15 @@ class CellDetectionController:
         y_train = y_train[..., 0:1]
         y_val = y_val[..., 0:1]
 
-        preprocess_input = sm.get_preprocessing(reverse_backbone_mapping[self.model_settings.model_backbone].lower())
+        if self.model_settings.model_framework == modelFrameworks.PYTORCH:
+            from segmentation_models_pytorch.encoders import get_preprocessing_fn
+            preprocess_input = get_preprocessing_fn(
+                encoder_name=reverse_backbone_mapping[self.model_settings.model_backbone].lower(),
+                pretrained='imagenet'
+            )
+        else:
+            import segmentation_models as sm
+            preprocess_input = sm.get_preprocessing(reverse_backbone_mapping[self.model_settings.model_backbone].lower())
         X_train = preprocess_input(X_train)
         X_val = preprocess_input(X_val)
 
@@ -273,6 +280,27 @@ class CellDetectionController:
     def on_training_finished(self):
         if self.model_settings.model_framework == modelFrameworks.PYTORCH:
             import torch
+            self.X_val_predict = torch.from_numpy(self.X_val_predict).float()
+            self.X_val_predict = self.X_val_predict.permute(0, 3, 1, 2).to(self.model.device)
+            
+            if self.X_val_predict.max() > 1.0:
+                self.X_val_predict = self.X_val_predict / 255.0
+            
+            pad_h = (32 - self.X_val_predict.shape[2] % 32) % 32
+            pad_w = (32 - self.X_val_predict.shape[3] % 32) % 32
+            if pad_h > 0 or pad_w > 0:
+                self.X_val_predict = torch.nn.functional.pad(self.X_val_predict, (0, pad_w, 0, pad_h))
+            
+            with torch.no_grad():
+                predictions = self.model.predict(self.X_val_predict)
+                probabilities = torch.sigmoid(predictions)
+                                    #(predictions > 0.5)
+            binary_predictions = (probabilities).squeeze(1).cpu().numpy()
+            
+            binary_predictions = binary_predictions * 255
+            
+            """
+            import torch
             print(self.X_val_predict.shape)
             self.X_val_predict = torch.from_numpy(self.X_val_predict).float()
             self.X_val_predict = self.X_val_predict.permute(0, 3, 1, 2).to(self.model.device)
@@ -285,12 +313,14 @@ class CellDetectionController:
             with torch.no_grad():
                 predictions = self.model.predict(self.X_val_predict)
             binary_predictions = (
-                (predictions > 0.5)
+                #(predictions > 0.5)
+                (predictions)
                 .squeeze(1)  # Remove channel dimension
                 .cpu()
                 .numpy()
                 .astype(np.uint8)
                     )
+            """
         else:
             predictions = self.model.predict(self.X_val_predict)
             binary_predictions = (predictions > 0.5).astype(np.uint8)
@@ -309,7 +339,7 @@ class CellDetectionController:
 
     def on_training_error(self, error_msg):
         print(f"Error: {error_msg}")
-        self.ui.training_tab.train_button.setText("Train") 
+        self.ui.training_tab.train_button.setText("Train and Detect") 
         self.ui.training_tab.train_button.setEnabled(True)
 
     def update_metrics_table(self, metrics):

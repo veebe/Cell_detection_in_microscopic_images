@@ -156,9 +156,9 @@ class TrainingTab(QWidget):
         layout.addWidget(splitter2)
 
     def handle_drop(self, files, widget=None):
-        self.first_visible_image = files[0]
         if self.controller:
             if widget == self.image_drop:
+                self.first_visible_image = files[0]
                 self.controller.load_images(files)
             elif widget == self.mask_drop:
                 self.controller.load_masks(files)
