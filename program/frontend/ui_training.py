@@ -9,6 +9,8 @@ from frontend.widgets.processBar import ProgressBarWidget
 from frontend.widgets.icon import IconButtonWidget
 from frontend.widgets.splitter import SplitterWidget
 from frontend.widgets.slider import SliderWidget
+from frontend.widgets.combobox import ComboBoxWidget
+from frontend.widgets.label import LabelWidget
 
 class TrainingTab(QWidget):
     def __init__(self):
@@ -111,11 +113,23 @@ class TrainingTab(QWidget):
         self.middle_layout = QVBoxLayout(self.middle_container)
         #layout.addLayout(self.middle_layout)
 
+        model_settings_layout = QHBoxLayout()
+
         self.model_settings_button = IconButtonWidget("icons/settings-gear-icon.svg")
         self.model_settings_button.setToolTip("Model Settings")  
         self.model_settings_button.setFixedSize(20, 20)
         self.model_settings_button.setIconSize(QSize(20, 20))
-        self.middle_layout.addWidget(self.model_settings_button)
+
+        self.image_size_dropdown = ComboBoxWidget()
+        self.image_size_dropdown.addItems(["64x64", "128x128", "256x256","512x512"])
+        self.image_size_dropdown.setCurrentIndex(2)
+        self.image_size_label = LabelWidget("Select training image size:")
+        
+        model_settings_layout.addWidget(self.image_size_label)
+        model_settings_layout.addWidget(self.image_size_dropdown)
+        model_settings_layout.addWidget(self.model_settings_button)
+
+        self.middle_layout.addLayout(model_settings_layout)
 
         self.plot = PlotWidget()
         self.middle_layout.addWidget(self.plot)

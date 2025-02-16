@@ -1,6 +1,7 @@
 import segmentation_models as sm
 import tensorflow as tf
-from tensorflow.keras.optimizers import Adam
+from keras._tf_keras.keras.optimizers import Adam
+#from tensorflow.keras.optimizers import Adam
 from backend.models.model import BaseModel
 from backend.training.trainingThread import TrainingThreadKeras
 

@@ -4,16 +4,13 @@ from PyQt5.QtGui import QPixmap, QImage
 from PyQt5.QtCore import Qt, QTimer
 from frontend.ui_main import MainUI
 import numpy as np
-from sklearn.model_selection import train_test_split
 from frontend.widgets.popUpWidget import PopUpWidget
 from backend.training.trainingProgressCallback import TrainingProgressCallback
 import yolov5 as yol
 from PyQt5.QtWidgets import QFileDialog
+from backend.backend_predict import PredictionController, PredictMethods, PreprocessingSettings
 
 from enum import Enum
-
-IMAGE_HEIGHT = 512
-IMAGE_WIDTH = 512
 
 class modelTypes(Enum):
     UNET = 1
@@ -57,17 +54,6 @@ class ModelSettings:
         self.epochs = 10
         self.val_split = 20
 
-class PreprocessingSettings:
-    def __init__(self):
-        self.blur_check = False
-        self.blur = 0
-        self.brightness_check = False
-        self.brightness = 0
-        self.contrast_check = False
-        self.contrast = 100
-        self.denoise_check = False
-        self.denoise = 0
-
 class CellDetectionController:
     def __init__(self, ui):
         self.ui = ui
@@ -87,16 +73,22 @@ class CellDetectionController:
         self.val_indices = []
         self.X_val_predict = []
 
-        self.ui.set_controller(self)
         self.model = None
         self.model_settings = ModelSettings()
-        self.preprocessign_settings = PreprocessingSettings()
+        self.preprocess_settings = PreprocessingSettings()
 
         self.left_timer = QTimer()
         self.right_timer = QTimer()
         self.left_timer.timeout.connect(self.navigate_left)
         self.right_timer.timeout.connect(self.navigate_right)
         self.test_set_visible = True
+
+        self.image_height = 0
+        self.image_width = 0
+
+        self.predictionController = PredictionController()
+
+        self.ui.set_controller(self)
 
     def load_images(self, files):
         if files:
@@ -134,9 +126,8 @@ class CellDetectionController:
         for path in mask_paths:
             mask = cv2.imread(path, cv2.IMREAD_GRAYSCALE)
             if mask is not None:
-                mask = cv2.resize(mask, (IMAGE_WIDTH, IMAGE_HEIGHT))
                 masks.append(mask)
-        return np.array(masks)[..., np.newaxis]
+        return masks
     
     def convert_loaded_images_to_array(self, common_image_paths):
         images = []
@@ -144,10 +135,49 @@ class CellDetectionController:
             img = cv2.imread(path)  
             if img is not None:
                 img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-                img = cv2.resize(img, (IMAGE_WIDTH, IMAGE_HEIGHT))
                 images.append(img)
+        return images
+    
+    def resize_loaded_images(self,image_array):
+        images = []
+        for img in image_array:
+            img = cv2.resize(img,(self.image_width,self.image_height))
+            images.append(img)
         return np.array(images)
+    
+    def resize_loaded_masks(self,mask_array):
+        images = []
+        for img in mask_array:
+            img = cv2.resize(img,(self.image_width,self.image_height))
+            images.append(img)
+        return np.array(images)[..., np.newaxis]
+    
+    def apply_prerocessing(self,image_array):
+        images = []
+        for img in image_array:
+            if self.preprocess_settings.blur_check:
+                ksize = self.preprocess_settings.blur
+                ksize = ksize + 1 if ksize % 2 == 0 else ksize 
+                img = cv2.GaussianBlur(img, (ksize, ksize), 0)
 
+            if self.preprocess_settings.contrast_check:
+                alpha = self.preprocess_settings.contrast / 100
+                img = cv2.convertScaleAbs(img, alpha=alpha)
+            if self.preprocess_settings.brightness_check:
+                beta = self.preprocess_settings.brightness
+                img = cv2.convertScaleAbs(img, beta=beta)
+
+            if self.preprocess_settings.denoise_check:
+                h = self.preprocess_settings.denoise
+                if len(img.shape) == 3:
+                    img = cv2.fastNlMeansDenoisingColored(img, None, h, h)
+                else:  
+                    img = cv2.fastNlMeansDenoising(img, None, h)
+
+            images.append(img)
+        return images
+    
+    
     def train_networks(self):
         if len(self.loaded_mask_array) == 0:
             popup = PopUpWidget("error", "No masks loaded")
@@ -169,13 +199,22 @@ class CellDetectionController:
             popup.show()
             return
         
+        
+        from sklearn.model_selection import train_test_split
+        
         self.ui.training_tab.train_button.setText("Training...") 
         self.ui.training_tab.train_button.setEnabled(False)
         
         self.ui.training_tab.progress_bar.setMaximum(self.model_settings.epochs)
-        
-        images = self.loaded_image_array.astype(np.float32)  
-        masks = (self.loaded_mask_array > 128).astype(np.float32)
+
+        self.image_height = int(self.ui.training_tab.image_size_dropdown.currentText().split('x')[0]) 
+        self.image_width = int(self.ui.training_tab.image_size_dropdown.currentText().split('x')[0]) 
+
+        self.loaded_image_array_processed = self.resize_loaded_images(self.apply_prerocessing(self.loaded_image_array))
+        self.loaded_mask_array_processed = self.resize_loaded_masks(self.loaded_mask_array)
+
+        images = self.loaded_image_array_processed.astype(np.float32)  
+        masks = (self.loaded_mask_array_processed > 128).astype(np.float32)
 
         indices = np.arange(len(images))
         val_split = self.model_settings.val_split/100
@@ -214,7 +253,8 @@ class CellDetectionController:
         self.callback.metrics_updated.connect(self.update_metrics_table)
         
         if self.ui.training_tab.test_set_visible:
-            test_images = self.test_loaded_image_array.astype(np.float32)
+            self.test_loaded_image_array_processed = self.resize_loaded_images(self.apply_prerocessing(self.test_loaded_image_array))
+            test_images = self.test_loaded_image_array_processed.astype(np.float32)
             test_images = preprocess_input(test_images)
             self.X_val_predict = test_images
         else:
@@ -225,10 +265,10 @@ class CellDetectionController:
         
         if self.model_settings.model_framework == modelFrameworks.KERAS:
             from backend.models.keras import KerasModel
-            self.model = KerasModel(backbone=reverse_backbone_mapping[self.model_settings.model_backbone])
+            self.model = KerasModel(backbone=reverse_backbone_mapping[self.model_settings.model_backbone],input_size=(self.image_height,self.image_width,3))
         elif self.model_settings.model_framework == modelFrameworks.PYTORCH:
             from backend.models.pytorch import PyTorchModel
-            self.model = PyTorchModel(backbone=reverse_backbone_mapping[self.model_settings.model_backbone])
+            self.model = PyTorchModel(backbone=reverse_backbone_mapping[self.model_settings.model_backbone], input_size=(self.image_height,self.image_width))
 
         self.model.compile()
         self.model.epochs = self.model_settings.epochs
@@ -255,13 +295,14 @@ class CellDetectionController:
             train_dataset = CustomDataset(X_train, y_train, transform=train_transform)
             val_dataset = CustomDataset(X_val, y_val, transform=None) 
 
-            train_loader = DataLoader(train_dataset, batch_size=16, shuffle=True)
-            val_loader = DataLoader(val_dataset, batch_size=16, shuffle=False)
+            train_loader = DataLoader(train_dataset, batch_size=16, shuffle=True, num_workers=4, pin_memory=True)
+            val_loader = DataLoader(val_dataset, batch_size=16, shuffle=False, num_workers=4, pin_memory=True)
 
             self.model._train(train_loader, val_loader,callbacks = self.callback)
 
         elif self.model_settings.model_framework == modelFrameworks.KERAS:
-            from tensorflow.keras.preprocessing.image import ImageDataGenerator
+            from keras._tf_keras.keras.preprocessing.image import ImageDataGenerator
+            #from tensorflow.keras.preprocessing.image import ImageDataGenerator
 
             datagen = ImageDataGenerator(
                 rotation_range=15,
@@ -276,6 +317,24 @@ class CellDetectionController:
             )
 
             self.model._train(train_generator, (X_val, y_val),callbacks = self.callback)
+
+    def model_uploaded(self, path):
+        import os
+        self.predictionController.framework = os.path.splitext(path)[1]
+        self.predictionController.load_model(path)
+        
+    def weights_uploaded(self, path):
+        import os
+        self.predictionController.framework = os.path.splitext(path)[1]
+        self.predictionController.load_weights(path)
+        
+    def predict(self):
+        self.predicted_masks = self.predictionController.evaluate()
+        self.ui.analysis_tab.predicted_image.display_image(self.predicted_masks[0])
+
+        
+    def load_eval_images(self, files):
+        self.predictionController.eval_image_paths = files
 
     def on_training_finished(self):
         if self.model_settings.model_framework == modelFrameworks.PYTORCH:
@@ -298,29 +357,6 @@ class CellDetectionController:
             binary_predictions = (probabilities).squeeze(1).cpu().numpy()
             
             binary_predictions = binary_predictions * 255
-            
-            """
-            import torch
-            print(self.X_val_predict.shape)
-            self.X_val_predict = torch.from_numpy(self.X_val_predict).float()
-            self.X_val_predict = self.X_val_predict.permute(0, 3, 1, 2).to(self.model.device)
-            print(self.X_val_predict.shape)
-            
-            pad_h = (32 - self.X_val_predict.shape[2] % 32) % 32
-            pad_w = (32 - self.X_val_predict.shape[3] % 32) % 32
-            self.X_val_predict = torch.nn.functional.pad(self.X_val_predict, (0, pad_w, 0, pad_h))
-            print(self.X_val_predict.shape)
-            with torch.no_grad():
-                predictions = self.model.predict(self.X_val_predict)
-            binary_predictions = (
-                #(predictions > 0.5)
-                (predictions)
-                .squeeze(1)  # Remove channel dimension
-                .cpu()
-                .numpy()
-                .astype(np.uint8)
-                    )
-            """
         else:
             predictions = self.model.predict(self.X_val_predict)
             binary_predictions = (predictions > 0.5).astype(np.uint8)
@@ -454,29 +490,29 @@ class CellDetectionController:
         if 'gaussian_blur' in values:
             gaussian = values['gaussian_blur']
             if isinstance(gaussian, dict) and 'enabled' in gaussian and 'value' in gaussian:
-                self.preprocessign_settings.blur_check = gaussian['enabled']
-                self.preprocessign_settings.blur = int(gaussian['value'])
+                self.preprocess_settings.blur_check = gaussian['enabled']
+                self.preprocess_settings.blur = int(gaussian['value'])
 
         if 'brightness' in values:
             brightness = values['brightness']
             if isinstance(brightness, dict) and 'enabled' in brightness and 'value' in brightness:
-                self.preprocessign_settings.brightness_check = brightness['enabled']
-                self.preprocessign_settings.brightness = int(brightness['value'])
+                self.preprocess_settings.brightness_check = brightness['enabled']
+                self.preprocess_settings.brightness = int(brightness['value'])
 
         if 'contrast' in values:
             contrast = values['contrast']
             if isinstance(contrast, dict) and 'enabled' in contrast and 'value' in contrast:
-                self.preprocessign_settings.contrast_check = contrast['enabled']
-                self.preprocessign_settings.contrast = int(contrast['value'])
+                self.preprocess_settings.contrast_check = contrast['enabled']
+                self.preprocess_settings.contrast = int(contrast['value'])
 
         if 'denoise' in values:
             denoise = values['denoise']
             if isinstance(denoise, dict) and 'enabled' in denoise and 'value' in denoise:
-                self.preprocessign_settings.denoise_check = denoise['enabled']
-                self.preprocessign_settings.denoise = int(denoise['value'])
+                self.preprocess_settings.denoise_check = denoise['enabled']
+                self.preprocess_settings.denoise = int(denoise['value'])
 
         print("Model Settings Updated:", self.model_settings.__dict__)
-        print("Preprocessing Settings Updated:", self.preprocessign_settings.__dict__)
+        print("Preprocessing Settings Updated:", self.preprocess_settings.__dict__)
 
 
 

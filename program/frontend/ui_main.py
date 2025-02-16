@@ -2,6 +2,7 @@ from PyQt5.QtWidgets import QWidget, QVBoxLayout, QLabel, QTabWidget, QApplicati
 from frontend.ui_training import TrainingTab  
 from PyQt5.QtCore import Qt
 from frontend.widgets.tabs import TabWidget
+from frontend.ui_analysis import AnalysisTab
 
 class MainUI(QWidget):
     def __init__(self):
@@ -30,17 +31,10 @@ class MainUI(QWidget):
         self.training_tab = TrainingTab()
         self.tabs.addTab(self.training_tab, "Training")
 
-        self.analysis_tab = QWidget()
-        self.create_analysis_tab()
+        self.analysis_tab = AnalysisTab()
         self.tabs.addTab(self.analysis_tab, "Analysis")
-
-    def create_analysis_tab(self):
-        layout = QVBoxLayout(self.analysis_tab)
-
-        self.analysis_label = QLabel("Analysis tools will be added here.")
-        self.analysis_label.setAlignment(Qt.AlignCenter)
-        layout.addWidget(self.analysis_label)
 
     def set_controller(self, controller):
         self.controller = controller
         self.training_tab.set_controller(controller) 
+        self.analysis_tab.set_controller(controller)

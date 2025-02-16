@@ -8,7 +8,7 @@ from backend.models.model import BaseModel
 from backend.training.trainingThread import TrainingThreadPyTorch
 
 class PyTorchModel(BaseModel, nn.Module):
-    def __init__(self, model_type=modelTypes.UNET, backbone="resnet34", input_channels=3, num_classes=1, device='cuda'):
+    def __init__(self, model_type=modelTypes.UNET, backbone="resnet34", input_channels=3, num_classes=1, device='cuda', input_size=(256, 256)):
         super(PyTorchModel, self).__init__()
         nn.Module.__init__(self) 
 
@@ -16,6 +16,8 @@ class PyTorchModel(BaseModel, nn.Module):
             self.device = device
         else:
             self.device = "cpu"
+
+        print(self.device)
 
         backbone = backbone.lower()
 
@@ -39,6 +41,7 @@ class PyTorchModel(BaseModel, nn.Module):
         self.input_channels = input_channels
         self.num_classes = num_classes
         self.device = device
+        self.input_size = input_size
 
         self.metrics = {'loss': [], 'val_loss': [], 'accuracy': [], 'val_accuracy': []}
 
@@ -121,7 +124,8 @@ class PyTorchModel(BaseModel, nn.Module):
             'backbone': self.backbone,
             'input_channels': self.input_channels,
             'num_classes': self.num_classes,
-            'device': self.device
+            'device': self.device,
+            'input_size': self.input_size
         }, path)
 
     @classmethod
@@ -132,10 +136,13 @@ class PyTorchModel(BaseModel, nn.Module):
             backbone=checkpoint['backbone'],
             input_channels=checkpoint['input_channels'],
             num_classes=checkpoint['num_classes'],
-            device=checkpoint['device']
+            device=checkpoint['device'],
+            input_size=checkpoint['input_size']
         )
         model.model.load_state_dict(checkpoint['model_state'])
-        model.optimizer.load_state_dict(checkpoint['optimizer_state'])
+        model.compile()
+        if 'optimizer_state' in checkpoint:
+            model.optimizer.load_state_dict(checkpoint['optimizer_state'])
         return model
     
     def save_weights(self, path: str):
