@@ -173,13 +173,13 @@ class TrainingTab(QWidget):
         if self.controller:
             if widget == self.image_drop:
                 self.first_visible_image = files[0]
-                self.controller.load_images(files)
+                self.controller.trainingController.load_images(files)
             elif widget == self.mask_drop:
-                self.controller.load_masks(files)
+                self.controller.trainingController.load_masks(files)
             elif widget == self.test_image_drop:
-                self.controller.load_test_images(files)
+                self.controller.trainingController.load_test_images(files)
             elif widget == self.test_mask_drop:
-                self.controller.load_test_masks(files)
+                self.controller.trainingController.load_test_masks(files)
 
     def toggle_training_set(self):
         for i in range(self.testing_set_layout.count()):
@@ -210,20 +210,21 @@ class TrainingTab(QWidget):
             dialog.set_all_widget_values(self.settings_values)
         if dialog.exec_() == QDialog.Accepted:
             self.settings_values = dialog.get_all_widget_values()
-        self.controller.save_settings(self.settings_values)
+            if self.settings_values is not None:
+                self.controller.trainingController.save_settings(self.settings_values)
             
     def set_controller(self, controller):
         self.controller = controller
-        self.train_button.clicked.connect(self.controller.train_networks)
+        self.train_button.clicked.connect(self.controller.trainingController.train_networks)
 
-        self.left_button.pressed.connect(self.controller.start_navigate_left)
-        self.left_button.released.connect(self.controller.stop_navigate)
-        self.right_button.pressed.connect(self.controller.start_navigate_right)
-        self.right_button.released.connect(self.controller.stop_navigate)
+        self.left_button.pressed.connect(self.controller.trainingController.start_navigate_left)
+        self.left_button.released.connect(self.controller.trainingController.stop_navigate)
+        self.right_button.pressed.connect(self.controller.trainingController.start_navigate_right)
+        self.right_button.released.connect(self.controller.trainingController.stop_navigate)
 
         self.add_testing_set_button.clicked.connect(self.toggle_training_set)
-        self.add_testing_set_button.clicked.connect(controller.toggle_training_set)
+        self.add_testing_set_button.clicked.connect(self.controller.trainingController.toggle_training_set)
         self.model_settings_button.clicked.connect(self.model_settings)
-        self.download_model_button.clicked.connect(self.controller.download_model)
-        self.download_weights_button.clicked.connect(self.controller.download_weights)
-        self.image_slider.slider.valueChanged.connect(self.controller.move_preview)
+        self.download_model_button.clicked.connect(self.controller.trainingController.download_model)
+        self.download_weights_button.clicked.connect(self.controller.trainingController.download_weights)
+        self.image_slider.slider.valueChanged.connect(self.controller.trainingController.move_preview)

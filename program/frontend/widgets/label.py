@@ -36,6 +36,8 @@ class ImageLabelWidget(QLabel):
             self.setText("")
     
     def display_image(self, image_data):
+        if image_data is None:
+            return
         if isinstance(image_data, np.ndarray):
             if image_data.dtype == np.float32 or image_data.dtype == np.float64:
                 image_rgb = (image_data * 255).astype(np.uint8)
@@ -44,9 +46,6 @@ class ImageLabelWidget(QLabel):
 
             if len(image_rgb.shape) == 2:
                 image_rgb = cv2.cvtColor(image_rgb, cv2.COLOR_GRAY2RGB)
-        else:
-            QMessageBox.warning(self, "Invalid Data", "The prediction data is not in the correct format.")
-            return
 
         h, w, ch = image_rgb.shape
         bytes_per_line = ch * w
@@ -57,3 +56,4 @@ class ImageLabelWidget(QLabel):
         self.original_pixmap = pixmap
 
         self.setPixmap(scaled_pixmap)
+        self.setText("")

@@ -1,6 +1,7 @@
 from PyQt5.QtCore import QObject, pyqtSignal
 from tensorflow.python.keras.callbacks import Callback
 
+
 class TrainingProgressCallback(QObject, Callback):
     progress_updated = pyqtSignal(int)  
     metrics_updated = pyqtSignal(dict) 

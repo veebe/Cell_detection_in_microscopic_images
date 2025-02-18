@@ -7,9 +7,19 @@ from backend.training.trainingThread import TrainingThreadKeras
 
 class KerasModel(BaseModel):
     def __init__(self, backbone="resnet34", input_size=(256, 256, 3), num_classes=1):
-        backbone = backbone.lower()
-        self.model = sm.Unet(backbone, input_shape=input_size, encoder_weights="imagenet", classes=num_classes, activation="sigmoid")
+        self.backbone = backbone
+        self.input_size = input_size
+        self.num_classes = num_classes
         self.epochs = 10
+
+        self.model = sm.Unet(self.backbone, input_shape=input_size, encoder_weights="imagenet", classes=num_classes, activation="sigmoid")
+
+        self.model._metadata = {
+            "backbone": self.backbone,
+            "input_size": self.input_size,
+            "num_classes": self.num_classes,
+            "epochs": self.epochs
+        }
 
     def compile(self, optimizer="adam", loss="binary_crossentropy"):
 
@@ -33,8 +43,23 @@ class KerasModel(BaseModel):
     def save(self, path: str):
         self.model.save(path)
 
-    def load(self, path: str):
-        self.model = tf.keras.models.load_model(path)
+    @classmethod
+    def load(cls, path: str):
+        model = tf.keras.models.load_model(path)
+
+        metadata = getattr(model, "_metadata", None)
+        if metadata is None:
+            raise ValueError("No metadata found in the model!")
+        
+        instance = cls(
+            backbone=metadata["backbone"],
+            input_size=tuple(metadata["input_size"]),
+            num_classes=metadata["num_classes"]
+        )
+        instance.epochs = metadata["epochs"]
+        instance.model = model
+        instance.compile()
+        return instance
 
     def save_weights(self, path: str):
         self.model.save_weights(path)

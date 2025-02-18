@@ -15,6 +15,7 @@ import numpy as np
 import cv2
 
 
+
 class ModelSettingsDialog(QDialog):
     def __init__(self, parent=None, first_visible_image=None):
         super().__init__(parent)
@@ -68,8 +69,7 @@ class ModelSettingsDialog(QDialog):
 
         self.backbone_label = LabelWidget("Select Backbone:")
         self.backbone_dropdown = ComboBoxWidget()
-        self.backbone_dropdown.addItems(["Resnet34", "Resnet50","EfficientNet-B3"])
-
+        
         self.validation_label = LabelWidget("Validation Split:")
         self.validation_slider = SliderWidget(Qt.Horizontal, inc_label=False, label_default="Validation set")
         self.validation_slider.slider.setRange(5, 50)
@@ -82,6 +82,13 @@ class ModelSettingsDialog(QDialog):
         self.epochs_slider.slider.setValue(15)
         self.epochs_slider.slider.setTickInterval(1)
 
+        self.batch_label = LabelWidget("Batch size:")
+        self.batch_slider = SliderWidget(Qt.Horizontal, inc_label=False, label_default="Batch size", percent=False, power_of_two=True)
+        self.batch_slider.slider.setRange(1, 6)
+        self.batch_slider.set_power_value(2)
+        
+        self.batch_slider.slider.setSliderPosition(4)  
+
         self.reset_model_button = PurpleButton("Reset")
         self.reset_model_button.clicked.connect(self.reset_model)
 
@@ -91,6 +98,7 @@ class ModelSettingsDialog(QDialog):
         form_layout.addRow(self.backbone_label, self.backbone_dropdown)
         form_layout.addRow(self.validation_label, self.validation_slider)
         form_layout.addRow(self.epochs_label, self.epochs_slider)
+        form_layout.addRow(self.batch_label, self.batch_slider)
         form_layout.addRow(self.reset_model_button)
 
         layout.addLayout(form_layout)
@@ -189,8 +197,27 @@ class ModelSettingsDialog(QDialog):
 
         if framework == "Keras":
             self.model_dropdown.addItems(["U-Net"])
+            self.backbone_dropdown.addItems(['resnet18', 'resnet34', 'resnet50', 'resnet101', 'resnet152', 'seresnet18', 'seresnet34', 'seresnet50', 'seresnet101', 'seresnet152', 'seresnext50', 'seresnext101',
+                                             'senet154', 'resnext50', 'resnext101', 'vgg16', 'vgg19', 'densenet121', 'densenet169', 'densenet201',
+                                             'inceptionresnetv2', 'inceptionv3', 'mobilenet', 'mobilenetv2', 'efficientnetb0', 'efficientnetb1', 'efficientnetb2', 'efficientnetb3', 'efficientnetb4', 'efficientnetb5'])
+
         elif framework == "PyTorch":
             self.model_dropdown.addItems(["U-Net", "U-Net++", "DeepLabV3", "FPN"])
+            self.backbone_dropdown.addItems([
+                                                'resnet18', 'resnet34', 'resnet50', 'resnet101', 'resnet152',
+                                                'resnext50_32x4d', 'resnext101_32x8d',
+                                                'densenet121', 'densenet169', 'densenet161', 'densenet201',
+                                                'vgg11', 'vgg11_bn', 'vgg13', 'vgg13_bn', 'vgg16', 'vgg16_bn', 'vgg19', 'vgg19_bn',
+                                                'mobilenet_v2',
+                                                'efficientnet-b0', 'efficientnet-b1', 'efficientnet-b2', 'efficientnet-b3',
+                                                'efficientnet-b4', 'efficientnet-b5', 'efficientnet-b6', 'efficientnet-b7',
+                                                'dpn68', 'dpn68b', 'dpn92', 'dpn98', 'dpn107', 'dpn131',
+                                                'inceptionresnetv2', 'inceptionv4',
+                                                'xception',
+                                                'timm-resnest14d', 'timm-resnest26d', 'timm-resnest50d', 'timm-resnest101e',
+                                                'timm-regnetx_002', 'timm-regnetx_032', 'timm-regnety_002', 'timm-regnety_032',
+                                                'timm-skresnet18', 'timm-skresnet34', 'timm-skresnext50_32x4d'
+                                            ])
 
     def accept(self):
         print("Accepted")
@@ -267,6 +294,7 @@ class ModelSettingsDialog(QDialog):
         values['backbone'] = self.backbone_dropdown.currentText()
         values['validation_split'] = self.validation_slider.slider.value()
         values['epochs'] = self.epochs_slider.slider.value()
+        values['batch'] = self.batch_slider.slider.value()
 
         values['gaussian_blur'] = {
             'enabled': self.gaussian_check.isChecked(),
@@ -302,6 +330,8 @@ class ModelSettingsDialog(QDialog):
             self.validation_slider.slider.setValue(values['validation_split'])
         if 'epochs' in values:
             self.epochs_slider.slider.setValue(values['epochs'])
+        if 'batch' in values:
+            self.batch_slider.slider.setValue(values['batch'])
 
         if 'gaussian_blur' in values:
             gaussian = values['gaussian_blur']

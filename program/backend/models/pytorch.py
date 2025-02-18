@@ -19,7 +19,7 @@ class PyTorchModel(BaseModel, nn.Module):
 
         print(self.device)
 
-        backbone = backbone.lower()
+        backbone = backbone
 
         if model_type == modelTypes.UNET:
             self.model = smp.Unet(encoder_name=backbone, in_channels=input_channels, classes=num_classes)

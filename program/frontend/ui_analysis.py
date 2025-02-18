@@ -12,10 +12,14 @@ from frontend.widgets.slider import SliderWidget
 from frontend.widgets.combobox import ComboBoxWidget
 from frontend.widgets.label import LabelWidget, ImageLabelWidget
 from backend.backend_predict import PredictMethods
+from frontend.widgets.checkBox import CheckBoxWidget
 
 class AnalysisTab(QWidget):
     def __init__(self):
         super().__init__()
+
+        self.first_visible_image = None
+        self.settings_values = None
 
         layout = QHBoxLayout(self)
 
@@ -30,14 +34,16 @@ class AnalysisTab(QWidget):
         self.pretrained_models_dropdown_label = LabelWidget("Select Pretrained model")
         self.pretrained_models_dropdown = ComboBoxWidget()
         self.pretrained_models_dropdown.addItems([
-            "ResNet-50", "ResNet-101", "VGG16", "VGG19", "MobileNetV2", "EfficientNet-B0", "EfficientNet-B7"
+            "Mask R-CNN", "StarDist", "DeepCell", "Cellpose", "GAN"
         ])
         self.pretrained_models_dropdown.currentIndexChanged.connect(self.update_model_dropdown)
+        self.pretrained_models_dropdown.setCurrentIndex(0)
 
         self.preprocessing_settings_button = IconButtonWidget("icons/settings-gear-icon.svg")
         self.preprocessing_settings_button.setToolTip("Image Preprocessing")  
         self.preprocessing_settings_button.setFixedSize(20, 20)
         self.preprocessing_settings_button.setIconSize(QSize(20, 20))
+        self.preprocessing_settings_button.clicked.connect(self.analysis_settings)
 
         self.eval_images_drop = DragDropWidget(self, "Drag & Drop images for evaluation here", self.handle_drop)
         self.eval_images_drop.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
@@ -47,6 +53,8 @@ class AnalysisTab(QWidget):
         self.method_dropdown_label = LabelWidget("Select prediciton method")
         self.method_dropdown = ComboBoxWidget()
         self.method_dropdown.addItems(["Uploaded model","Uploaded weights","Pretrained model"])
+
+        self.method_dropdown.currentIndexChanged.connect(self.update_method_dropdown)
       
         form_layout_widget = QWidget()
         form_layout = QFormLayout(form_layout_widget)
@@ -61,23 +69,26 @@ class AnalysisTab(QWidget):
 
         splitter = SplitterWidget(Qt.Horizontal)
         splitter.addWidget(form_layout_widget)
-        """
-        self.predicted_image = QLabel("Image Preview")
-        self.predicted_image.setAlignment(Qt.AlignCenter)
-        self.predicted_image.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        self.predicted_image.setStyleSheet(""
-            border: 2px dashed #aaa;
-            color: #ffffff;
-            font-size: 10px;            
-            font-weight: bold;                    
-        "")
-        """
+
         predicted_layout = QWidget()
-        predicted_layout.setMinimumWidth(400)
+        predicted_layout.setMinimumWidth(600)
+
         predicted_layout_box = QVBoxLayout(predicted_layout)
-        self.predicted_image = ImageLabelWidget("Image Preview")
-        predicted_layout_box.addWidget(self.predicted_image)
-        
+
+        self.threshold_slider = SliderWidget(label_default="threshold",inc_label=False)
+        predicted_layout_box.addWidget(self.threshold_slider)
+        self.threshold_slider.slider.setRange(0,100)
+        self.threshold_slider.slider.setValue(50)
+
+        predicted_image_layout_box = QHBoxLayout()
+        self.predicted_image = ImageLabelWidget(label="Mask Preview")
+        predicted_image_layout_box.addWidget(self.predicted_image)
+
+        self.segmented_image = ImageLabelWidget(label="Segmentation Preview")
+        predicted_image_layout_box.addWidget(self.segmented_image)
+
+        predicted_layout_box.addLayout(predicted_image_layout_box)
+
         self.image_slider = SliderWidget()
         predicted_layout_box.addWidget(self.image_slider)
  
@@ -92,32 +103,59 @@ class AnalysisTab(QWidget):
 
         layout.addWidget(splitter)
 
+    def showEvent(self, event):
+        super().showEvent(event)
+        self.update_model_dropdown()
+
+    def analysis_settings(self):
+        from frontend.ui_analysisSettings import AnalysisSettingsDialog
+        
+        dialog = AnalysisSettingsDialog(self, first_visible_image=self.first_visible_image)
+        if self.settings_values is not None:
+            dialog.set_all_widget_values(self.settings_values)
+        if dialog.exec_() == QDialog.Accepted:
+            self.settings_values = dialog.get_all_widget_values()
+            if self.settings_values is not None:
+                self.controller.predictionController.save_settings(self.settings_values)
+
     def update_model_dropdown(self):
+        self.controller.predictionController.model_selected = self.pretrained_models_dropdown.currentText().lower()
+
+    def update_method_dropdown(self):
         if self.method_dropdown.currentText() == "Uploaded model":
-            self.controller.predictionController.self.predict_method = PredictMethods.UPLOADED_MODEL
+            self.controller.predictionController.predict_method = PredictMethods.UPLOADED_MODEL
         elif self.method_dropdown.currentText() == "Uploaded weights":
-            self.controller.predictionController.self.predict_method = PredictMethods.UPLOADED_WEIGHTS
+            self.controller.predictionController.predict_method = PredictMethods.UPLOADED_WEIGHTS
         elif self.method_dropdown.currentText() == "Pretrained model":
-            self.controller.predictionController.self.predict_method = PredictMethods.SELECTED_MODEL
+            self.controller.predictionController.predict_method = PredictMethods.SELECTED_MODEL
 
     def upload_model(self):
-        file_path, _ = QFileDialog.getOpenFileName(self, "Upload Model", "", "Model Files (*.h5 *.pt *.pth)")
+        file_path, _ = QFileDialog.getOpenFileName(self, "Upload Model", "", "Model Files (*.h5 *.pt *.pth *.keras)")
         if file_path:
             print(f"Model uploaded: {file_path}")
-            self.controller.model_uploaded(file_path)
+            self.controller.predictionController.load_model(file_path)
 
     def upload_weights(self):
         file_path, _ = QFileDialog.getOpenFileName(self, "Upload Weights", "", "Weight Files (*weights.h5 *.pt *.pth)")
         if file_path:
             print(f"Weights uploaded: {file_path}")
-            self.controller.weights_uploaded(file_path)
+            self.controller.predictionController.load_weights(file_path)
 
     def handle_drop(self, files, widget=None):
         if self.controller:
+            self.first_visible_image = files[0]
             self.image_slider.slider.setRange(0,len(files)-1)
+            self.image_slider.slider.setValue(0)
             if widget == self.eval_images_drop:
-                self.controller.load_eval_images(files)
+                self.controller.predictionController.eval_image_paths = files
 
     def set_controller(self, controller):
         self.controller = controller
-        self.predict_button.clicked.connect(self.controller.predict)
+        self.predict_button.clicked.connect(self.controller.predictionController.evaluate)
+        self.image_slider.slider.valueChanged.connect(self.controller.predictionController.predict_move_preview)
+        self.threshold_slider.slider.valueChanged.connect(self.controller.predictionController.threshold_change)
+
+        self.left_button.pressed.connect(self.controller.predictionController.predict_start_navigate_left)
+        self.left_button.released.connect(self.controller.predictionController.predict_stop_navigate)
+        self.right_button.pressed.connect(self.controller.predictionController.predict_start_navigate_right)
+        self.right_button.released.connect(self.controller.predictionController.predict_stop_navigate)
