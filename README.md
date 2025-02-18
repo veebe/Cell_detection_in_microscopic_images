@@ -4,9 +4,9 @@
 This application detects and segments cells in microscopic images using deep learning models. It provides preprocessing options, postrocessing segmentation and supports multiple segmentation architectures.
 
 ## Features
-- **Deep Learning-Based Segmentation**: Uses U-Net, and U-Net++ for cell detection.
-- **Custom Preprocessing**: Apply denoising, blur and other enhancements before segmentation.
-- **Real-Time Preview**: Adjust preprocessing parameters with checkboxes and sliders.
+- **Deep Learning-Based Segmentation**: Uses U-Net, U-Net++ and more for cell detection.
+- **Custom Preprocessing**: Apply denoising, blur and other enhancements before training and segmentation.
+- **Real-Time Preview**: Click and hold and watch your segmented images move in time.
 - **Watershed Algorithm**: Additional algorithms for segmentation, custom tresholding.
 
 ## Installation
@@ -17,6 +17,7 @@ This application detects and segments cells in microscopic images using deep lea
 - OpenCV
 - Qt for GUI
 - NumPy, Matplotlib
+- more (I will create requirements.txt with everything needed)
 
 ## Usage
 ### Training
@@ -30,7 +31,7 @@ This application detects and segments cells in microscopic images using deep lea
 ### Segmentation
 1. Load a microscopic images.
 2. Select detection method.
-  2.1. Load the selected detection model, weights or select one from the pretrained models.
+      * Load the selected detection model, weights or select one from the pretrained models.
 4. Choose preprocessing options (denoising, thresholding, etc.).
 6. Run the detection process.
 7. View the segmented image and masks.
