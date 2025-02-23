@@ -62,7 +62,7 @@ class ModelSettingsDialog(QDialog):
 
         self.framework_label = LabelWidget("Select Framework:")
         self.framework_dropdown = ComboBoxWidget()
-        self.framework_dropdown.addItems(["Keras", "PyTorch"])
+        self.framework_dropdown.addItems(["Keras", "PyTorch", "StarDist"])
 
         self.model_label = LabelWidget("Select Model:")
         self.model_dropdown = ComboBoxWidget()
@@ -194,6 +194,7 @@ class ModelSettingsDialog(QDialog):
     def update_model_dropdown(self):
         framework = self.framework_dropdown.currentText()
         self.model_dropdown.clear()
+        self.backbone_dropdown.clear()
 
         if framework == "Keras":
             self.model_dropdown.addItems(["U-Net"])
@@ -218,6 +219,9 @@ class ModelSettingsDialog(QDialog):
                                                 'timm-regnetx_002', 'timm-regnetx_032', 'timm-regnety_002', 'timm-regnety_032',
                                                 'timm-skresnet18', 'timm-skresnet34', 'timm-skresnext50_32x4d'
                                             ])
+        elif framework == "StarDist":
+            self.model_dropdown.addItems(["StarDist"])
+            self.backbone_dropdown.addItems(["StarDist"])
 
     def accept(self):
         print("Accepted")

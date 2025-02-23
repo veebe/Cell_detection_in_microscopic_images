@@ -5,6 +5,7 @@ class modelTypes(Enum):
     UNETPP = 2
     DEEPLABV3 = 3
     FNP = 4
+    STARDIST = 5
 
 class modelFrameworks(Enum):
     KERAS = 1
@@ -24,7 +25,8 @@ model_mapping = {
     "U-Net": modelTypes.UNET,
     "U-Net++": modelTypes.UNETPP,
     "DeepLabV3": modelTypes.DEEPLABV3,
-    "FPN": modelTypes.FNP
+    "FPN": modelTypes.FNP,
+    "StarDist": modelTypes.STARDIST
 }
 
 framework_mapping = {
@@ -34,6 +36,7 @@ framework_mapping = {
 
 KERAS = "keras"
 PYTORCH = "pytorch"
+STARDIST = "stardist"
 
 backbone_mapping = {
     "Resnet34": modelBackbones.RESNET34,

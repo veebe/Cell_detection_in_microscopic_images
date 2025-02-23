@@ -11,7 +11,7 @@ import yolov5 as yol
 from PyQt5.QtWidgets import QFileDialog
 from backend.backend_predict import PredictionController, PredictMethods
 
-from backend.backend_types import modelTypes,modelFrameworks, modelBackbones, framework_mapping, backbone_mapping, model_mapping, reverse_backbone_mapping, PYTORCH, KERAS
+from backend.backend_types import modelTypes,modelFrameworks, modelBackbones, framework_mapping, backbone_mapping, model_mapping, reverse_backbone_mapping, PYTORCH, KERAS, STARDIST
 from backend.setting_classes import ModelSettings, PreprocessingSettings 
 
 
@@ -105,7 +105,10 @@ class TrainingController:
     def resize_loaded_masks(self,mask_array):
         images = []
         for img in mask_array:
-            img = cv2.resize(img,(self.image_width,self.image_height))
+            if self.model_settings.model_framework == STARDIST:
+                img = cv2.resize(img, (self.image_width, self.image_height), interpolation=cv2.INTER_NEAREST)
+            else:
+                img = cv2.resize(img,(self.image_width,self.image_height))
             images.append(img)
         return np.array(images)[..., np.newaxis]
     
@@ -171,7 +174,16 @@ class TrainingController:
         self.loaded_mask_array_processed = self.resize_loaded_masks(self.loaded_mask_array)
 
         images = self.loaded_image_array_processed.astype(np.float32)  
-        masks = (self.loaded_mask_array_processed > 128).astype(np.float32)
+        if self.model_settings.model_framework == STARDIST:
+            from scipy.ndimage import label
+
+            labeled_masks = np.zeros_like(self.loaded_mask_array_processed, dtype=np.uint16)
+            for i, mask in enumerate(self.loaded_mask_array_processed):
+                labeled_mask, _ = label(mask > 128)  
+                labeled_masks[i] = labeled_mask
+            masks = labeled_masks
+        else:
+            masks = (self.loaded_mask_array_processed > 128).astype(np.float32)
 
         indices = np.arange(len(images))
         val_split = self.model_settings.val_split/100
@@ -192,11 +204,13 @@ class TrainingController:
                 encoder_name= self.model_settings.model_backbone,
                 pretrained='imagenet'
             )
-        else:
+        elif self.model_settings.model_framework == KERAS:
             import segmentation_models as sm
             preprocess_input = sm.get_preprocessing(self.model_settings.model_backbone)
-        X_train = preprocess_input(X_train)
-        X_val = preprocess_input(X_val)
+
+        if self.model_settings.model_framework in [PYTORCH, KERAS]:
+            X_train = preprocess_input(X_train)
+            X_val = preprocess_input(X_val)
 
         self.X_val_predict = X_val
 
@@ -212,7 +226,7 @@ class TrainingController:
         if self.ui.training_tab.test_set_visible:
             self.test_loaded_image_array_processed = self.resize_loaded_images(self.apply_prerocessing(self.test_loaded_image_array))
             test_images = self.test_loaded_image_array_processed.astype(np.float32)
-            test_images = preprocess_input(test_images)
+            test_images = preprocess_input(test_images) if self.model_settings.model_framework != STARDIST else test_images
             self.X_val_predict = test_images
         else:
             max_index = len(self.val_indices) - 1
@@ -225,10 +239,29 @@ class TrainingController:
             self.model = KerasModel(backbone=self.model_settings.model_backbone,input_size=(self.image_height,self.image_width,3))
         elif self.model_settings.model_framework == PYTORCH:
             from backend.models.pytorch import PyTorchModel
-            self.model = PyTorchModel(backbone=self.model_settings.model_backbone, input_size=(self.image_height,self.image_width))
+            self.model = PyTorchModel(model_type=self.model_settings.model_type,backbone=self.model_settings.model_backbone, input_size=(self.image_height,self.image_width))
+        elif self.model_settings.model_framework == STARDIST:
+            from backend.models.stardist import StarDistModel
+            self.model = StarDistModel(input_size=(self.image_height,self.image_width))
 
         self.model.compile()
         self.model.epochs = self.model_settings.epochs
+
+        if self.model_settings.model_framework == STARDIST:
+            y_train = np.squeeze(y_train, axis=-1)
+            y_val = np.squeeze(y_val, axis=-1)
+            self.model.batch_size = self.model_settings.batch
+
+            from backend.training.trainingThreadStarDist import TrainingThreadStarDist
+            self.training_thread = TrainingThreadStarDist(
+                model=self.model,
+                X_train=X_train,
+                Y_train=y_train,
+                X_val=X_val,
+                Y_val=y_val,
+                callbacks=[self.callback]
+            )
+            self.training_thread.start()
 
         if self.model_settings.model_framework == PYTORCH:
             from torch.utils.data import TensorDataset, DataLoader
@@ -259,7 +292,6 @@ class TrainingController:
 
         elif self.model_settings.model_framework == KERAS:
             from keras._tf_keras.keras.preprocessing.image import ImageDataGenerator
-            #from tensorflow.keras.preprocessing.image import ImageDataGenerator
 
             datagen = ImageDataGenerator(
                 rotation_range=15,
@@ -332,6 +364,8 @@ class TrainingController:
         print(f"Error: {error_msg}")
         self.ui.training_tab.train_button.setText("Train and Detect") 
         self.ui.training_tab.train_button.setEnabled(True)
+        popup = PopUpWidget("error", error_msg)
+        popup.show()
 
     def update_metrics_table(self, metrics):
         row_position = self.ui.training_tab.metrics_table.table.rowCount()
@@ -350,7 +384,7 @@ class TrainingController:
         self.ui.training_tab.progress_bar.setValue(value)
 
     def display_current_image(self):
-        if len(self.image_paths) == 0 or len(self.mask_paths) == 0 or len(self.processed_images) == 0:
+        if len(self.image_paths) == 0 or len(self.mask_paths) == 0:# or len(self.processed_images) == 0:
             print("Error: No images or masks loaded.")
             return
         if self.ui.training_tab.test_set_visible:

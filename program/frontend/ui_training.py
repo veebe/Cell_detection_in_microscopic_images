@@ -121,7 +121,7 @@ class TrainingTab(QWidget):
         self.model_settings_button.setIconSize(QSize(20, 20))
 
         self.image_size_dropdown = ComboBoxWidget()
-        self.image_size_dropdown.addItems(["64x64", "128x128", "256x256","512x512"])
+        self.image_size_dropdown.addItems(["64x64", "128x128", "224x224", "256x256","512x512"])
         self.image_size_dropdown.setCurrentIndex(2)
         self.image_size_label = LabelWidget("Select training image size:")
         
@@ -146,7 +146,7 @@ class TrainingTab(QWidget):
         
         self.right_layout = QVBoxLayout(self.right_container)
 
-        self.metrics_table = TableWidget()
+        self.metrics_table = TableWidget(columns=["Epoch", "Loss", "Accuracy", "Val Loss", "Val Accuracy"])
         self.right_layout.addWidget(self.metrics_table)
 
         self.progress_bar = ProgressBarWidget()

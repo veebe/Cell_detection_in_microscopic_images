@@ -8,7 +8,7 @@ from backend.training.trainingProgressCallback import TrainingProgressCallback
 import yolov5 as yol
 from PyQt5.QtWidgets import QFileDialog
 
-from backend.setting_classes import PreprocessingSettings
+from backend.setting_classes import PreprocessingSettings, ModelSettings
 from backend.backend_types import PredictMethods
 
 class PredictionController:
@@ -16,6 +16,10 @@ class PredictionController:
         self.model_uploaded = None
         self.model_selected = None
         self.weights_uploaded = None
+        self.weights_uploaded_path = ""
+        self.model_uploaded_path = ""
+        self.metadata_uploaded_path = ""
+        self.weights_uploaded_model_settings = ModelSettings()
 
         self.eval_image_paths = []
         self.eval_images = []
@@ -107,18 +111,17 @@ class PredictionController:
     def load_model(self, path):
         import os
         self.framework = os.path.splitext(path)[1]
-
-        if self.framework == ".pth" or self.framework == ".pt":
-            from backend.models.pytorch import PyTorchModel
-            self.model_uploaded = PyTorchModel.load(path=path)
-        else:
-            from backend.models.keras import KerasModel
-            self.model_uploaded = KerasModel.load(path=path)
+        self.model_uploaded_path = path
 
     def load_weights(self,path):
-        from backend.models.pytorch import PyTorchModel
         import os
         self.framework = os.path.splitext(path)[1]
+        self.weights_uploaded_path = path
+
+    def load_metadata(self,path):
+        self.metadata_uploaded_path = path
+
+
 
     def load_pretrained_model(self, model_name):
         model_name = model_name.lower()
@@ -169,9 +172,6 @@ class PredictionController:
             print(f"Error loading {model_name}: {str(e)}")
             return None
 
-
-
-
     def evaluate(self):
         import torch
         if self.predict_method == PredictMethods.SELECTED_MODEL:
@@ -179,9 +179,33 @@ class PredictionController:
             self.model = self.load_pretrained_model(self.model_selected)
             self.framework = ".pth"
         elif self.predict_method == PredictMethods.UPLOADED_MODEL:
+            if self.framework == ".pth" or self.framework == ".pt":
+                from backend.models.pytorch import PyTorchModel
+                self.model_uploaded = PyTorchModel.load(path=self.model_uploaded_path)
+            else:
+                from backend.models.keras import KerasModel
+                self.model_uploaded = KerasModel.load(path=self.model_uploaded_path,meta_path=self.metadata_uploaded_path)
             self.model = self.model_uploaded
         elif self.predict_method == PredictMethods.UPLOADED_WEIGHTS:
+            print("ulpading")
+            print(f"{self.weights_uploaded_model_settings.model_type} {self.weights_uploaded_model_settings.model_backbone} {self.weights_uploaded_model_settings.model_framework}")
+
+            self.image_height = int(self.ui.analysis_tab.image_size_dropdown.currentText().split('x')[0]) 
+            self.image_width = int(self.ui.analysis_tab.image_size_dropdown.currentText().split('x')[0]) 
+            if self.weights_uploaded_path == "":
+                popup = PopUpWidget("error","No path")
+                popup.show()
+                return
+            if self.weights_uploaded_model_settings.model_framework == "pytorch":
+                from backend.models.pytorch import PyTorchModel
+                self.weights_uploaded = PyTorchModel(self.weights_uploaded_model_settings.model_type,self.weights_uploaded_model_settings.model_backbone, input_size=(self.image_height,self.image_width))
+                self.weights_uploaded.load_weights(path=self.weights_uploaded_path)
+                self.framework = ".pth"
+            elif self.weights_uploaded_model_settings.model_framework == "keras":
+                from backend.models.keras import KerasModel
+                self.weights_uploaded = KerasModel(self.weights_uploaded_model_settings.model_backbone,input_size=(self.image_height,self.image_width,3))
             self.model = self.weights_uploaded
+
         if self.model == None:
             popup = PopUpWidget("error", "No model")
             popup.show()
@@ -281,35 +305,59 @@ class PredictionController:
                         predictions.append(pred)
                 predictions = torch.cat(predictions)
                 self.probabilities = torch.sigmoid(predictions)
-                binary_predictions = (self.probabilities > (self.threshold / 100)).squeeze(1).cpu().numpy()
+                #binary_predictions = (self.probabilities > (self.threshold / 100)).squeeze(1).cpu().numpy()
                 
-                binary_predictions = (binary_predictions * 255).astype(np.uint8)
+                #binary_predictions = (binary_predictions * 255).astype(np.uint8)
         
         else:
-            predictions = self.model.predict(self.X_val_predict)
-            binary_predictions = (predictions > 0.5).astype(np.uint8)
+            predictions = self.model.predict(self.eval_images_preprocessed_np)
+            
+            if predictions.ndim == 4:
+                self.probabilities = predictions.squeeze(-1)
+            else:
+                self.probabilities = predictions.copy()
+            #binary_predictions = (self.probabilities > (self.threshold/100)).astype(np.uint8) * 255
         
+        self.threshold_change(self.threshold)
+
+        """
         self.predicitons = binary_predictions
+        
         self.postprocess_cells(binary_predictions)
         self.disply_current_predicted_image()
         return binary_predictions
-        
+        """
+
+    def resize_to_original(self, segmented_images):
+        resized_images = []
+        for i, seg_img in enumerate(segmented_images):
+            original_height, original_width = self.eval_images[i].shape[:2] 
+            resized_img = cv2.resize(seg_img, (original_width, original_height), interpolation=cv2.INTER_NEAREST)
+            resized_images.append(resized_img)
+        return resized_images
+
     def threshold_change(self, value):
         self.threshold = value
         if len(self.probabilities) > 0:
-            binary_predictions = (self.probabilities > (value /100)).squeeze(1).cpu().numpy()
+            if self.framework in [".pth", ".pt"]: 
+                binary_predictions = (self.probabilities > (value/100)).squeeze(1).cpu().numpy()
+            else:  
+                binary_predictions = (self.probabilities > (value/100))
+            
             binary_predictions = (binary_predictions * 255).astype(np.uint8)
-            self.predicitons = binary_predictions
+            
+            self.predicitons = self.resize_to_original(binary_predictions)
             self.postprocess_cells(binary_predictions)
             self.disply_current_predicted_image()
-        
+      
     def separate_cells(self, predictions):
         processed_predictions = []
         
         for i in range(len(predictions)):
             binary = predictions[i].astype(np.uint8)
             
-            kernel = np.ones((3,3), np.uint8)
+            #kernel = np.ones((3,3), np.uint8)
+            kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5,5))
             opening = cv2.morphologyEx(binary, cv2.MORPH_OPEN, kernel, iterations=2)
             
             sure_bg = cv2.dilate(opening, kernel, iterations=3)
@@ -349,13 +397,7 @@ class PredictionController:
             processed_predictions.append(output)
         
         processed_predictions = np.array(processed_predictions)
-        self.processed_predictions = processed_predictions
-        """
-        if hasattr(self, 'preview_image_index') and hasattr(self, 'ui'):
-            current_image = self.processed_predictions[self.preview_image_index]
-            colored_mask = cv2.applyColorMap(current_image, cv2.COLORMAP_JET)
-            self.ui.analysis_tab.segmented_image.display_image(colored_mask)
-        """
+        self.processed_predictions = self.resize_to_original(processed_predictions)
 
     def postprocess_cells(self, predictions):
 
@@ -370,8 +412,8 @@ class PredictionController:
             
             for pred in predictions:
                 binary = pred.astype(np.uint8)
-                binary = cv2.morphologyEx(binary, cv2.MORPH_OPEN, kernel, iterations=1)
-                binary = cv2.morphologyEx(binary, cv2.MORPH_CLOSE, kernel, iterations=1)
+                #binary = cv2.morphologyEx(binary, cv2.MORPH_OPEN, kernel, iterations=1)
+                #binary = cv2.morphologyEx(binary, cv2.MORPH_CLOSE, kernel, iterations=1)
                 cleaned_predictions.append(binary)
             
             cleaned_predictions = np.array(cleaned_predictions)
@@ -382,11 +424,47 @@ class PredictionController:
         except Exception as e:
             print(f"Error in postprocess_cells: {str(e)}")
             self.processed_predictions = predictions
-            """
-            if hasattr(self, 'preview_image_index') and hasattr(self, 'ui'):
-                current_image = self.processed_predictions[self.preview_image_index]
-                self.ui.analysis_tab.segmented_image.display_image(current_image, is_file_path=False)
-            """
+
+    def disply_current_predicted_image(self):
+        self.ui.analysis_tab.eval_images_drop.display_image(self.eval_image_paths[self.preview_image_index])
+        if len(self.predicitons) > 0:
+            self.ui.analysis_tab.predicted_image.display_image(self.predicitons[self.preview_image_index])
+
+            current_mask = self.processed_predictions[self.preview_image_index]
+            current_image = self.label_segments(current_mask)
+            self.ui.analysis_tab.segmented_image.display_image(current_image)
+
+    def label_segments(self, current_mask):
+            colored_mask = cv2.applyColorMap(current_mask, cv2.COLORMAP_JET)
+
+            label_overlay = np.zeros_like(colored_mask)
+
+            unique_labels = np.unique(current_mask)
+            unique_labels = unique_labels[unique_labels > 0]  
+
+            self.ui.analysis_tab.metrics_table.clear_table()           
+            id = 1
+            for label_id in unique_labels:
+                cell_mask = (current_mask == label_id).astype(np.uint8)
+
+                contours, _ = cv2.findContours(cell_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+                if len(contours) > 0:
+                    largest_contour = max(contours, key=cv2.contourArea)
+                    area = cv2.contourArea(largest_contour)
+                    M = cv2.moments(largest_contour)
+
+                    if M["m00"] > 0:  
+                        cX = int(M["m10"] / M["m00"])
+                        cY = int(M["m01"] / M["m00"])
+
+                        self.ui.analysis_tab.metrics_table.add_row([id,area])
+
+                        cv2.putText(label_overlay, str(id), (cX, cY), cv2.FONT_HERSHEY_SIMPLEX, 2, (255, 255, 255), 8, cv2.LINE_AA)
+                        id += 1
+
+            return cv2.addWeighted(colored_mask, 0.8, label_overlay, 1.0, 0)
+
     def predict_start_navigate_left(self):
         self.predict_navigate_left()  
         self.left_timer.start(100)  
@@ -414,17 +492,7 @@ class PredictionController:
     def predict_move_preview(self, value):
         self.preview_image_index = value
         self.disply_current_predicted_image()
-
-    def disply_current_predicted_image(self):
-        
-        self.ui.analysis_tab.eval_images_drop.display_image(self.eval_image_paths[self.preview_image_index])
-        if len(self.predicitons) > 0:
-            self.ui.analysis_tab.predicted_image.display_image(self.predicitons[self.preview_image_index])
-
-            current_image = self.processed_predictions[self.preview_image_index]
-            colored_mask = cv2.applyColorMap(current_image, cv2.COLORMAP_JET)
-            self.ui.analysis_tab.segmented_image.display_image(colored_mask)
-
+ 
     def save_settings(self, values):
         if 'gaussian_blur' in values:
             gaussian = values['gaussian_blur']

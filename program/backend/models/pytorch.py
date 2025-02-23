@@ -3,7 +3,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader
-from backend.backend import modelTypes
+from backend.backend_types import modelTypes
 from backend.models.model import BaseModel
 from backend.training.trainingThread import TrainingThreadPyTorch
 
@@ -18,8 +18,9 @@ class PyTorchModel(BaseModel, nn.Module):
             self.device = "cpu"
 
         print(self.device)
-
-        backbone = backbone
+        print(model_type)
+        print(backbone)
+        print(input_size)
 
         if model_type == modelTypes.UNET:
             self.model = smp.Unet(encoder_name=backbone, in_channels=input_channels, classes=num_classes)
@@ -147,3 +148,9 @@ class PyTorchModel(BaseModel, nn.Module):
     
     def save_weights(self, path: str):
         torch.save(self.model.state_dict(), path)
+
+    def load_weights(self, path: str):
+        checkpoint = torch.load(path, map_location=self.device)
+        self.model.load_state_dict(checkpoint)
+        self.model.to(self.device)
+        print("Model weights loaded successfully.")

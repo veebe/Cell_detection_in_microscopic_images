@@ -4,8 +4,8 @@ from backend.backend_types import modelFrameworks, modelBackbones, modelTypes
 class ModelSettings:
     def __init__(self):
         self.model_type = modelTypes.UNETPP
-        self.model_framework = modelFrameworks.PYTORCH
-        self.model_backbone = modelBackbones.RESNET50
+        self.model_framework = "keras"
+        self.model_backbone = "resnet34"
         self.epochs = 10
         self.val_split = 20
         self.batch = 16
