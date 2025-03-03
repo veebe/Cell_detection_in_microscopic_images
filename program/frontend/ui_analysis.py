@@ -13,6 +13,7 @@ from frontend.widgets.combobox import ComboBoxWidget
 from frontend.widgets.label import LabelWidget, ImageLabelWidget
 from backend.backend_predict import PredictMethods
 from frontend.widgets.checkBox import CheckBoxWidget
+from backend.backend_types import colormap_dict
 
 class AnalysisTab(QWidget):
     def __init__(self):
@@ -112,10 +113,19 @@ class AnalysisTab(QWidget):
 
         predicted_layout_box = QVBoxLayout(predicted_layout)
 
+        analysis_settings_layout = QHBoxLayout()
+        predicted_layout_box.addLayout(analysis_settings_layout)
+
         self.threshold_slider = SliderWidget(label_default="threshold",inc_label=False)
-        predicted_layout_box.addWidget(self.threshold_slider)
+        analysis_settings_layout.addWidget(self.threshold_slider)
         self.threshold_slider.slider.setRange(0,100)
         self.threshold_slider.slider.setValue(50)
+
+        self.color_options_dropdown = ComboBoxWidget()
+        self.color_options_dropdown.addItems(list(colormap_dict.keys()))
+        self.color_options_dropdown.setCurrentIndex(2)
+        self.color_options_dropdown.currentIndexChanged.connect(self.update_color_option)
+        analysis_settings_layout.addWidget(self.color_options_dropdown)
 
         predicted_image_layout_box = QHBoxLayout()
         self.predicted_image = ImageLabelWidget(label="Mask Preview")
@@ -150,8 +160,6 @@ class AnalysisTab(QWidget):
         splitter2.addWidget(splitter)
         splitter2.addWidget(self.analysis_metrics_widget)
 
-
-
         layout.addWidget(splitter2)
 
     def showEvent(self, event):
@@ -162,6 +170,10 @@ class AnalysisTab(QWidget):
     def export_table(self):
         from backend.data.excel_utils import export_to_excel
         export_to_excel(self.metrics_table.table)
+
+    def update_color_option(self):
+        color = self.color_options_dropdown.currentText()
+        self.controller.predictionController.update_color_option(colormap_dict[color])
 
     def update_model_dropdown(self):
         framework = self.framework_dropdown.currentText()

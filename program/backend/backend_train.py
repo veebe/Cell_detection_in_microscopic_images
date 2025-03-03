@@ -1,17 +1,13 @@
 
 import cv2
 from PyQt5.QtWidgets import QTableWidgetItem
-from PyQt5.QtGui import QPixmap, QImage
-from PyQt5.QtCore import Qt, QTimer
-from frontend.ui_main import MainUI
+from PyQt5.QtCore import QTimer
 import numpy as np
 from frontend.widgets.popUpWidget import PopUpWidget
 from backend.training.trainingProgressCallback import TrainingProgressCallback
-import yolov5 as yol
 from PyQt5.QtWidgets import QFileDialog
-from backend.backend_predict import PredictionController, PredictMethods
 
-from backend.backend_types import modelTypes,modelFrameworks, modelBackbones, framework_mapping, backbone_mapping, model_mapping, reverse_backbone_mapping, PYTORCH, KERAS, STARDIST
+from backend.backend_types import modelTypes, model_mapping, PYTORCH, KERAS, STARDIST
 from backend.setting_classes import ModelSettings, PreprocessingSettings 
 
 
@@ -61,7 +57,7 @@ class TrainingController:
             self.mask_paths = files
             self.loaded_mask_array = self.convert_loaded_masks_to_array(self.mask_paths)
             self.ui.training_tab.mask_label.setText("Masks uploaded: " + str( len(files) ) ) 
-            print(self.ui.training_tab.test_set_visible)
+
 
     def load_test_images(self, files):
         if files:
@@ -454,88 +450,38 @@ class TrainingController:
             self.ui.training_tab.image_slider.slider.setValue(len(self.test_image_paths) // 2) 
 
     def save_settings(self, values):
-
-        if 'framework' in values:
-            self.model_settings.model_framework = str(values['framework']).lower()
-
-        if 'model' in values:
-            model_str = values['model']
-            if model_str in model_mapping:
-                self.model_settings.model_type = model_mapping[model_str]
-
-        if 'backbone' in values:
-            self.model_settings.model_backbone = str(values['backbone']).lower()
-
-        if 'epochs' in values:
-            self.model_settings.epochs = int(values['epochs'])
-
-        if 'batch' in values:
-            self.model_settings.batch = int(2 ** values['batch'] )
         
-        if 'validation_split' in values:
-            self.model_settings.val_split = int(values['validation_split'])
-
-        if 'gaussian_blur' in values:
-            gaussian = values['gaussian_blur']
-            if isinstance(gaussian, dict) and 'enabled' in gaussian and 'value' in gaussian:
-                self.preprocess_settings.blur_check = gaussian['enabled']
-                self.preprocess_settings.blur = int(gaussian['value'])
-
-        if 'brightness' in values:
-            brightness = values['brightness']
-            if isinstance(brightness, dict) and 'enabled' in brightness and 'value' in brightness:
-                self.preprocess_settings.brightness_check = brightness['enabled']
-                self.preprocess_settings.brightness = int(brightness['value'])
-
-        if 'contrast' in values:
-            contrast = values['contrast']
-            if isinstance(contrast, dict) and 'enabled' in contrast and 'value' in contrast:
-                self.preprocess_settings.contrast_check = contrast['enabled']
-                self.preprocess_settings.contrast = int(contrast['value'])
-
-        if 'denoise' in values:
-            denoise = values['denoise']
-            if isinstance(denoise, dict) and 'enabled' in denoise and 'value' in denoise:
-                self.preprocess_settings.denoise_check = denoise['enabled']
-                self.preprocess_settings.denoise = int(denoise['value'])
-
+        self.model_settings.save_settings(values=values)
+        self.preprocess_settings.save_settings(values=values)
         print("Model Settings Updated:", self.model_settings.__dict__)
         print("Preprocessing Settings Updated:", self.preprocess_settings.__dict__)
 
-
-
     def download_model(self):
         if not hasattr(self, 'model') or self.model is None:
-            popup = PopUpWidget("error", "No trained model found!")
+            popup = PopUpWidget("error", "No model found!")
             popup.show()
             return
 
         options = QFileDialog.Options()
-        if self.model_settings.model_type == modelTypes.UNET:
+        if self.model_settings.model_framework == KERAS:
             file_path, _ = QFileDialog.getSaveFileName(None, "Save model", "model.keras", "Keras Files (*.keras);;H5 Files (*.h5);;All Files (*)", options=options)
-
-        if self.model_settings.model_type == modelTypes.UNETPP:
+        elif self.model_settings.model_framework == PYTORCH:
             file_path, _ = QFileDialog.getSaveFileName(None, "Save model", "model.pth", "Pth Files (*.pth);;All Files (*)", options=options)
 
         if file_path:
             self.model.save(file_path)
-            popup = PopUpWidget("info", f"Model saved to: {file_path}")
-            popup.show()
 
     def download_weights(self):
         if not hasattr(self, 'model') or self.model is None:
-            popup = PopUpWidget("error", "No trained model found!")
+            popup = PopUpWidget("error", "No model found!")
             popup.show()
             return
 
         options = QFileDialog.Options()
-        if self.model_settings.model_type == modelTypes.UNET:
+        if self.model_settings.model_framework == KERAS:
             file_path, _ = QFileDialog.getSaveFileName(None, "Save weights", "weights.weights.h5", "H5 Files (*.h5);;All Files (*)", options=options)
-
-        if self.model_settings.model_type == modelTypes.UNETPP:
+        elif self.model_settings.model_framework == PYTORCH:
             file_path, _ = QFileDialog.getSaveFileName(None, "Save weights", "weights.pth", "Pth Files (*.pth);;All Files (*)", options=options)
 
         if file_path:
             self.model.save_weights(file_path)
-            popup = PopUpWidget("info", f"Weights saved to: {file_path}")
-            popup.show()

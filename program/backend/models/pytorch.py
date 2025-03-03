@@ -128,6 +128,7 @@ class PyTorchModel(BaseModel, nn.Module):
             'device': self.device,
             'input_size': self.input_size
         }, path)
+        super().save(path)
 
     @classmethod
     def load(cls, path: str):
@@ -148,6 +149,7 @@ class PyTorchModel(BaseModel, nn.Module):
     
     def save_weights(self, path: str):
         torch.save(self.model.state_dict(), path)
+        super().save(path)
 
     def load_weights(self, path: str):
         checkpoint = torch.load(path, map_location=self.device)

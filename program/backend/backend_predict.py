@@ -1,15 +1,11 @@
 import cv2
-from PyQt5.QtWidgets import QTableWidgetItem
-from PyQt5.QtGui import QPixmap, QImage
 from PyQt5.QtCore import Qt, QTimer
 import numpy as np
 from frontend.widgets.popUpWidget import PopUpWidget
-from backend.training.trainingProgressCallback import TrainingProgressCallback
-import yolov5 as yol
-from PyQt5.QtWidgets import QFileDialog
 
 from backend.setting_classes import PreprocessingSettings, ModelSettings
 from backend.backend_types import PredictMethods
+from backend.backend_types import PYTORCH, KERAS, UNKNOWN
 
 class PredictionController:
     def __init__(self, ui):
@@ -27,6 +23,7 @@ class PredictionController:
         self.eval_images_preprocessed_np = []
         self.probabilities = []
         self.threshold = 50
+        self.current_color_option = cv2.COLORMAP_JET
 
         self.preprocess_settings = PreprocessingSettings()
         self.predict_method = PredictMethods.UPLOADED_MODEL
@@ -46,7 +43,7 @@ class PredictionController:
         self.ui = ui
         self.device = "cpu"
         self.model_name = ""
-
+    """
     def paths_to_cv2_images(self, paths):
         images = []
         for path in paths:
@@ -107,16 +104,25 @@ class PredictionController:
             import segmentation_models as sm
             preprocess_input = sm.get_preprocessing(self.model.backbone)
             return preprocess_input(np_images)
+    """
 
     def load_model(self, path):
-        import os
-        self.framework = os.path.splitext(path)[1]
+        self.parse_framework(path)
         self.model_uploaded_path = path
 
     def load_weights(self,path):
-        import os
-        self.framework = os.path.splitext(path)[1]
+        self.parse_framework(path)
         self.weights_uploaded_path = path
+
+    def parse_framework(self,path):
+        import os
+        framework = os.path.splitext(path)[1]
+        if framework in [".pth",".pt"]:
+            self.framework = PYTORCH
+        elif framework in [".keras",".h5"]:
+            self.framework = KERAS
+        else:
+            self.framework = UNKNOWN
 
     def load_metadata(self,path):
         self.metadata_uploaded_path = path
@@ -124,6 +130,7 @@ class PredictionController:
 
 
     def load_pretrained_model(self, model_name):
+        self.framework = ""
         model_name = model_name.lower()
         try:
             if model_name == "mask_rcnn":
@@ -171,23 +178,23 @@ class PredictionController:
         except Exception as e:
             print(f"Error loading {model_name}: {str(e)}")
             return None
-
+        
+    def uploaded_model_init(self):
+        if self.framework == PYTORCH:
+            from backend.models.pytorch import PyTorchModel
+            self.model_uploaded = PyTorchModel.load(path=self.model_uploaded_path)
+        elif self.framework == KERAS:
+            from backend.models.keras import KerasModel
+            self.model_uploaded = KerasModel.load(path=self.model_uploaded_path,meta_path=self.metadata_uploaded_path)
+        self.model = self.model_uploaded
+    
     def evaluate(self):
         import torch
         if self.predict_method == PredictMethods.SELECTED_MODEL:
-            print(self.model_selected)
             self.model = self.load_pretrained_model(self.model_selected)
-            self.framework = ".pth"
         elif self.predict_method == PredictMethods.UPLOADED_MODEL:
-            if self.framework == ".pth" or self.framework == ".pt":
-                from backend.models.pytorch import PyTorchModel
-                self.model_uploaded = PyTorchModel.load(path=self.model_uploaded_path)
-            else:
-                from backend.models.keras import KerasModel
-                self.model_uploaded = KerasModel.load(path=self.model_uploaded_path,meta_path=self.metadata_uploaded_path)
-            self.model = self.model_uploaded
+            self.uploaded_model_init()
         elif self.predict_method == PredictMethods.UPLOADED_WEIGHTS:
-            print("ulpading")
             print(f"{self.weights_uploaded_model_settings.model_type} {self.weights_uploaded_model_settings.model_backbone} {self.weights_uploaded_model_settings.model_framework}")
 
             self.image_height = int(self.ui.analysis_tab.image_size_dropdown.currentText().split('x')[0]) 
@@ -196,14 +203,15 @@ class PredictionController:
                 popup = PopUpWidget("error","No path")
                 popup.show()
                 return
-            if self.weights_uploaded_model_settings.model_framework == "pytorch":
+            if self.weights_uploaded_model_settings.model_framework == PYTORCH:
                 from backend.models.pytorch import PyTorchModel
                 self.weights_uploaded = PyTorchModel(self.weights_uploaded_model_settings.model_type,self.weights_uploaded_model_settings.model_backbone, input_size=(self.image_height,self.image_width))
                 self.weights_uploaded.load_weights(path=self.weights_uploaded_path)
-                self.framework = ".pth"
-            elif self.weights_uploaded_model_settings.model_framework == "keras":
+                self.framework = PYTORCH
+            elif self.weights_uploaded_model_settings.model_framework == KERAS:
                 from backend.models.keras import KerasModel
                 self.weights_uploaded = KerasModel(self.weights_uploaded_model_settings.model_backbone,input_size=(self.image_height,self.image_width,3))
+                self.framework = KERAS
             self.model = self.weights_uploaded
 
         if self.model == None:
@@ -218,13 +226,15 @@ class PredictionController:
         self.image_width = self.model.input_size[0]
         self.image_height = self.model.input_size[1]
 
-        self.eval_images = self.paths_to_cv2_images(self.eval_image_paths)
-        self.eval_images_preprocessed = self.cv2_images_preprocess(self.eval_images)
-        self.eval_images_preprocessed = self.cv2_images_resize(self.eval_images_preprocessed)
+        from backend.data.image_utils import paths_to_cv2_images,cv2_images_preprocess, cv2_images_resize, backbone_preprocess
+
+        self.eval_images = paths_to_cv2_images(self.eval_image_paths)
+        self.eval_images_preprocessed = cv2_images_preprocess(self.eval_images,self.preprocess_settings)
+        self.eval_images_preprocessed = cv2_images_resize(self.eval_images_preprocessed,self.image_width,self.image_height)
         self.eval_images_preprocessed_np = np.array(self.eval_images_preprocessed)
-        self.eval_images_preprocessed_np = self.backbone_preprocess(self.eval_images_preprocessed_np)
+        self.eval_images_preprocessed_np = backbone_preprocess(self.eval_images_preprocessed_np,framework=self.framework,backbone=self.model.backbone)
         
-        if self.framework == ".pth" or self.framework == ".pt":
+        if self.framework == PYTORCH:
             #from deepcell.applications import Mesmer
             from stardist.models import StarDist2D
             from cellpose import models
@@ -339,7 +349,7 @@ class PredictionController:
     def threshold_change(self, value):
         self.threshold = value
         if len(self.probabilities) > 0:
-            if self.framework in [".pth", ".pt"]: 
+            if self.framework == PYTORCH: 
                 binary_predictions = (self.probabilities > (value/100)).squeeze(1).cpu().numpy()
             else:  
                 binary_predictions = (self.probabilities > (value/100))
@@ -435,7 +445,7 @@ class PredictionController:
             self.ui.analysis_tab.segmented_image.display_image(current_image)
 
     def label_segments(self, current_mask):
-            colored_mask = cv2.applyColorMap(current_mask, cv2.COLORMAP_JET)
+            colored_mask = cv2.applyColorMap(current_mask, self.current_color_option)
 
             label_overlay = np.zeros_like(colored_mask)
 
@@ -464,6 +474,10 @@ class PredictionController:
                         id += 1
 
             return cv2.addWeighted(colored_mask, 0.8, label_overlay, 1.0, 0)
+    
+    def update_color_option(self, color):
+        self.current_color_option = color
+        self.disply_current_predicted_image()
 
     def predict_start_navigate_left(self):
         self.predict_navigate_left()  
@@ -494,28 +508,5 @@ class PredictionController:
         self.disply_current_predicted_image()
  
     def save_settings(self, values):
-        if 'gaussian_blur' in values:
-            gaussian = values['gaussian_blur']
-            if isinstance(gaussian, dict) and 'enabled' in gaussian and 'value' in gaussian:
-                self.preprocess_settings.blur_check = gaussian['enabled']
-                self.preprocess_settings.blur = int(gaussian['value'])
-
-        if 'brightness' in values:
-            brightness = values['brightness']
-            if isinstance(brightness, dict) and 'enabled' in brightness and 'value' in brightness:
-                self.preprocess_settings.brightness_check = brightness['enabled']
-                self.preprocess_settings.brightness = int(brightness['value'])
-
-        if 'contrast' in values:
-            contrast = values['contrast']
-            if isinstance(contrast, dict) and 'enabled' in contrast and 'value' in contrast:
-                self.preprocess_settings.contrast_check = contrast['enabled']
-                self.preprocess_settings.contrast = int(contrast['value'])
-
-        if 'denoise' in values:
-            denoise = values['denoise']
-            if isinstance(denoise, dict) and 'enabled' in denoise and 'value' in denoise:
-                self.preprocess_settings.denoise_check = denoise['enabled']
-                self.preprocess_settings.denoise = int(denoise['value'])
-
+        self.preprocess_settings.save_settings(values=values)
         print("Preprocessing Settings Updated:", self.preprocess_settings.__dict__)

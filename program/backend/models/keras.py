@@ -49,6 +49,7 @@ class KerasModel(BaseModel):
         metadata_path = f"{path}_metadata.json"
         with open(metadata_path, 'w') as f:
             json.dump(self.model._metadata, f)
+        super().save(path)
 
     @classmethod
     def load(cls, path: str, meta_path : str = ""):
@@ -83,6 +84,7 @@ class KerasModel(BaseModel):
         }
         with open(f"{path}_metadata.json", 'w') as f:
             json.dump(metadata, f)
+        super().save(path)
 
     def load_weights(self, path: str):
         try:

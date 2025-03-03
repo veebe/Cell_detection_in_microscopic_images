@@ -110,6 +110,7 @@ class ModelSettingsDialog(QDialog):
         self.backbone_dropdown.setCurrentIndex(0)
         self.validation_slider.slider.setValue(20)
         self.epochs_slider.slider.setValue(15)
+        self.batch_slider.slider.setSliderPosition(4)
 
     def reset_preprocess(self):
         self.gaussian_check.setChecked(False)

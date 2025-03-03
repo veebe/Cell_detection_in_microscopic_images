@@ -6,12 +6,16 @@ class BaseModel(ABC):
     def load(self, path: str):
         pass
 
-    @abstractmethod
     def save(self, path: str):
+        from frontend.widgets.popUpWidget import PopUpWidget
+        popup = PopUpWidget("info", f"Model saved to: {path}")
+        popup.show()
         pass
 
-    @abstractmethod
     def save_weights(self, path: str):
+        from frontend.widgets.popUpWidget import PopUpWidget
+        popup = PopUpWidget("info", f"Model weights saved to: {path}")
+        popup.show()
         pass
 
     @abstractmethod
