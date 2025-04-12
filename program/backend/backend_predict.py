@@ -4,7 +4,7 @@ import numpy as np
 from frontend.widgets.popUpWidget import PopUpWidget
 
 from backend.setting_classes import PreprocessingSettings, ModelSettings
-from backend.backend_types import PredictMethods
+from backend.backend_types import PredictMethods, WatershedAlgorithm
 from backend.backend_types import PYTORCH, KERAS, UNKNOWN
 
 class PredictionController:
@@ -24,6 +24,7 @@ class PredictionController:
         self.probabilities = []
         self.threshold = 50
         self.current_color_option = cv2.COLORMAP_JET
+        self.current_watershed_algorithm = WatershedAlgorithm.STANDARD
 
         self.preprocess_settings = PreprocessingSettings()
         self.predict_method = PredictMethods.UPLOADED_MODEL
@@ -34,6 +35,7 @@ class PredictionController:
         self.framework = ""
         self.preview_image_index = 0
         self.predicitons = []
+        self.binary_predictions = []
 
         self.left_timer = QTimer()
         self.right_timer = QTimer()
@@ -43,68 +45,6 @@ class PredictionController:
         self.ui = ui
         self.device = "cpu"
         self.model_name = ""
-    """
-    def paths_to_cv2_images(self, paths):
-        images = []
-        for path in paths:
-            img = cv2.imread(path)  
-            if img is not None:
-                img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-                images.append(img)
-        return images
-
-    def cv2_images_preprocess(self,cv_images):
-        images = []
-        for img in cv_images:
-            if self.preprocess_settings.denoise_check:
-                h = self.preprocess_settings.denoise
-                if len(img.shape) == 3:
-                    img = cv2.fastNlMeansDenoisingColored(img, None, h, h)
-                else:  
-                    img = cv2.fastNlMeansDenoising(img, None, h)
-
-            if self.preprocess_settings.blur_check:
-                ksize = self.preprocess_settings.blur
-                ksize = ksize + 1 if ksize % 2 == 0 else ksize 
-                img = cv2.GaussianBlur(img, (ksize, ksize), 0)
-
-            if self.preprocess_settings.contrast_check:
-                alpha = self.preprocess_settings.contrast / 100
-                img = cv2.convertScaleAbs(img, alpha=alpha)
-            if self.preprocess_settings.brightness_check:
-                beta = self.preprocess_settings.brightness
-                img = cv2.convertScaleAbs(img, beta=beta)
-
-            images.append(img)
-        return images
-
-    def cv2_images_resize(self, cv_images):
-        images = []
-        for img in cv_images:
-            if self.model_name in ["stardist", "cellpose"]:
-                if len(img.shape) == 3:
-                    img = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
-            else:
-                if len(img.shape) == 2:
-                    img = cv2.cvtColor(img, cv2.COLOR_GRAY2RGB)
-            img = cv2.resize(img,(self.image_width, self.image_height))
-            images.append(img)
-        return images
-        
-    def backbone_preprocess(self, np_images):
-        if self.framework == ".pth" or self.framework == ".pt":
-            from segmentation_models_pytorch.encoders import get_preprocessing_fn
-            if hasattr(self.model, "backbone"):
-                preprocess_input = get_preprocessing_fn(
-                    encoder_name=self.model.backbone,
-                    pretrained='imagenet'
-                )
-                return preprocess_input(np_images)
-        else:
-            import segmentation_models as sm
-            preprocess_input = sm.get_preprocessing(self.model.backbone)
-            return preprocess_input(np_images)
-    """
 
     def load_model(self, path):
         self.parse_framework(path)
@@ -127,49 +67,23 @@ class PredictionController:
     def load_metadata(self,path):
         self.metadata_uploaded_path = path
 
-
-
     def load_pretrained_model(self, model_name):
         self.framework = ""
-        model_name = model_name.lower()
+        self.model_name = model_name.lower()
+    
         try:
-            if model_name == "mask_rcnn":
-                from detectron2 import model_zoo
-                from detectron2.config import get_cfg
 
-                cfg = get_cfg()
-                cfg.merge_from_file(model_zoo.get_config_file("COCO-InstanceSegmentation/mask_rcnn_R_50_FPN_3x.yaml"))
-                cfg.MODEL.WEIGHTS = model_zoo.get_checkpoint_url("COCO-InstanceSegmentation/mask_rcnn_R_50_FPN_3x.yaml")
-                cfg.MODEL.DEVICE = self.device
-                model = cfg  
-                model.input_size = (cfg.INPUT.MIN_SIZE_TRAIN[0], cfg.INPUT.MIN_SIZE_TRAIN[1])
-                model.backbone = "resnet50"  
-                return model
-
-            elif model_name == "stardist": 
+            if model_name == "stardist": 
                 from stardist.models import StarDist2D
                 model = StarDist2D.from_pretrained('2D_versatile_he')
-                model.input_size = (256, 256)    
+                model.input_size = (512, 512)   
+                model.backbone = "" 
                 return model
-
-            elif model_name == "deepcell":
-                from deepcell.applications import Mesmer
-                model = Mesmer()
-                model.input_size = (256, 256)
-                return model
-
+            
             elif model_name == "cellpose":
                 from cellpose import models
                 model = models.Cellpose(gpu=(self.device == "cuda"), model_type='cyto')
-                model.input_size = (256, 256)  
-                return model
-
-            elif model_name == "gan":
-                import torch
-                from segmentation_models_pytorch import Unet
-                model = Unet(encoder_name="resnet34", classes=1)
-                model.input_size = (256, 256)
-                model.backbone = "resnet34"  
+                model.input_size = (512, 512)  
                 return model
 
             else:
@@ -187,13 +101,134 @@ class PredictionController:
             from backend.models.keras import KerasModel
             self.model_uploaded = KerasModel.load(path=self.model_uploaded_path,meta_path=self.metadata_uploaded_path)
         self.model = self.model_uploaded
+
+    def evaluate_stardist(self):
+        from csbdeep.utils import normalize
+        import numpy as np
+        import cv2
+
+        if len(self.eval_image_paths) == 0:
+            popup = PopUpWidget("error", "No Images")
+            popup.show()
+            return
+        
+        predictions = []
+        self.eval_images = []
+
+        for i, path in enumerate(self.eval_image_paths):
+            img = cv2.imread(path)
+            img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+            self.eval_images.append(img)
+
+            from backend.data.image_utils import cv2_images_preprocess
+
+            preprocessed = cv2_images_preprocess([img], self.preprocess_settings)[0]
+            
+            img_resized = cv2.resize(preprocessed, self.model.input_size)
+            
+            img_norm = normalize(img_resized, 1, 99.8, axis=(0,1)) 
     
+            labels, details = self.model.predict_instances(
+                img_norm,
+                prob_thresh=self.threshold/100,
+                nms_thresh=0.3,
+                axes='YXC', 
+                verbose=False 
+            )
+            predictions.append(labels)
+        
+        binary_predictions = []
+        for pred in predictions:
+            binary = (pred > 0).astype(np.uint8) * 255
+            binary_predictions.append(binary)
+        
+        self.binary_predictions = np.array(binary_predictions)
+        self.predicitons = self.resize_to_original(binary_predictions)
+        self.processed_predictions = self.resize_to_original(predictions)
+        
+        self.disply_current_predicted_image()
+        
+        return predictions
+    
+    def evaluate_cellpose(self):
+        from cellpose import models
+        import numpy as np
+        import cv2
+
+        if len(self.eval_image_paths) == 0:
+            popup = PopUpWidget("error", "No Images")
+            popup.show()
+            return
+        
+        predictions = []
+        self.eval_images = []
+
+        for i, path in enumerate(self.eval_image_paths):
+            img = cv2.imread(path)
+            img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+            self.eval_images.append(img)
+
+            from backend.data.image_utils import cv2_images_preprocess
+
+            preprocessed = cv2_images_preprocess([img], self.preprocess_settings)[0]
+            
+            img_resized = cv2.resize(preprocessed, self.model.input_size)
+            
+            if img_resized.max() <= 1.0:
+                img_resized = (img_resized * 255).astype(np.uint8)
+        
+            channels = [0, 0]  
+            diameter = None 
+            
+            try:
+                result = self.model.eval([img_resized], 
+                                        diameter=diameter,
+                                        channels=channels,
+                                        flow_threshold=self.threshold/100,
+                                        cellprob_threshold=0.0,
+                                        do_3D=False)
+                
+                if isinstance(result, (tuple, list)):
+                    masks = result[0]
+                else:
+                    masks = result
+                
+                predictions.append(masks[0])  
+                
+            except Exception as e:
+                print(f"Error using Cellpose: {str(e)}")
+                popup = PopUpWidget("error", f"Cellpose error: {str(e)}")
+                popup.show()
+                return None
+        
+        binary_predictions = []
+        for pred in predictions:
+            binary = (pred > 0).astype(np.uint8) * 255
+            binary_predictions.append(binary)
+        
+        self.binary_predictions = np.array(binary_predictions)
+        self.predicitons = self.resize_to_original(binary_predictions)
+        self.processed_predictions = self.resize_to_original(predictions)
+        
+        self.disply_current_predicted_image()
+        
+        return predictions
+
     def evaluate(self):
         import torch
+        self.model_name = ""
         if self.predict_method == PredictMethods.SELECTED_MODEL:
             self.model = self.load_pretrained_model(self.model_selected)
+            
+            if self.model_name == "stardist":
+                return self.evaluate_stardist()
+            elif self.model_name == "cellpose":
+                return self.evaluate_cellpose()
+        
         elif self.predict_method == PredictMethods.UPLOADED_MODEL:
             self.uploaded_model_init()
+            self.image_width = self.model.input_size[0]
+            self.image_height = self.model.input_size[1]
         elif self.predict_method == PredictMethods.UPLOADED_WEIGHTS:
             print(f"{self.weights_uploaded_model_settings.model_type} {self.weights_uploaded_model_settings.model_backbone} {self.weights_uploaded_model_settings.model_framework}")
 
@@ -223,9 +258,6 @@ class PredictionController:
             popup.show()
             return
 
-        self.image_width = self.model.input_size[0]
-        self.image_height = self.model.input_size[1]
-
         from backend.data.image_utils import paths_to_cv2_images,cv2_images_preprocess, cv2_images_resize, backbone_preprocess
 
         self.eval_images = paths_to_cv2_images(self.eval_image_paths)
@@ -235,89 +267,29 @@ class PredictionController:
         self.eval_images_preprocessed_np = backbone_preprocess(self.eval_images_preprocessed_np,framework=self.framework,backbone=self.model.backbone)
         
         if self.framework == PYTORCH:
-            #from deepcell.applications import Mesmer
-            from stardist.models import StarDist2D
-            from cellpose import models
-            if isinstance(self.model, StarDist2D):
-                from skimage.exposure import rescale_intensity
-                from skimage.color import label2rgb
-                from skimage.io import imread
-
-                image = imread(self.eval_image_paths[0])
-
-                from skimage.exposure import rescale_intensity
-
-                image_normed = rescale_intensity(image, out_range=(0, 1))
-
-                print(f'Intensity range: [{image_normed.min()} - {image_normed.max()}]')
-                print(f'Array type: {image_normed.dtype}')
-
-                labels, polys = self.model.predict_instances(
-                    image_normed,
-                    axes="YXC",
-                    prob_thresh=0.5,  
-                    nms_thresh=0.1, 
-                    scale=1, 
-                    return_labels=True,
-                )
-
-                probabilities = list(polys["prob"])
-
-                n_detections = len(probabilities)
-
-                print(f'{n_detections} cells detected.')
-
-                from skimage.color import label2rgb
-                rgb_composite = label2rgb(labels, image=image, bg_label=0)
-
-                self.ui.analysis_tab.segmented_image.display_image(rgb_composite)
-
-
-                return()
-
-            #elif isinstance(self.model, Mesmer):
-            #    masks = self.model.predict(np.expand_dims(self.eval_images_preprocessed_np, -1))
-            #    binary_predictions = masks[...,0] * 255
-
-            elif isinstance(self.model, models.Cellpose):
-                masks, _, _ = self.model.eval(self.eval_images_preprocessed_np, diameter=None)
-                binary_predictions = (masks > 0).astype(np.uint8) * 255
+            import torch
+            self.X_val_predict = torch.from_numpy(self.eval_images_preprocessed_np).float()
+            print(self.X_val_predict.shape)
+            print(self.eval_images_preprocessed_np.shape)
+            self.X_val_predict = self.X_val_predict.permute(0, 3, 1, 2).to(self.model.device)
             
-            #elif "mask_rcnn" in str(type(self.model)):
-            #    # Mask R-CNN prediction
-            #    from detectron2.engine import DefaultPredictor
-            #    predictor = DefaultPredictor(self.model)
-            #    outputs = predictor(self.eval_images_preprocessed_np[0])
-            #    masks = outputs["instances"].pred_masks.cpu().numpy()
-            #    binary_predictions = np.any(masks, axis=0).astype(np.uint8) * 255
+            if self.X_val_predict.max() > 1.0:
+                self.X_val_predict = self.X_val_predict / 255.0
             
-            else:
-                import torch
-                self.X_val_predict = torch.from_numpy(self.eval_images_preprocessed_np).float()
-                print(self.X_val_predict.shape)
-                print(self.eval_images_preprocessed_np.shape)
-                self.X_val_predict = self.X_val_predict.permute(0, 3, 1, 2).to(self.model.device)
-                
-                if self.X_val_predict.max() > 1.0:
-                    self.X_val_predict = self.X_val_predict / 255.0
-                
-                pad_h = (32 - self.X_val_predict.shape[2] % 32) % 32
-                pad_w = (32 - self.X_val_predict.shape[3] % 32) % 32
-                if pad_h > 0 or pad_w > 0:
-                    self.X_val_predict = torch.nn.functional.pad(self.X_val_predict, (0, pad_w, 0, pad_h))
-                
-                batch_size = 4 
-                predictions = []
-                for i in range(0, len(self.X_val_predict), batch_size):
-                    batch = self.X_val_predict[i:i+batch_size]
-                    with torch.no_grad():
-                        pred = self.model.predict(batch)
-                        predictions.append(pred)
-                predictions = torch.cat(predictions)
-                self.probabilities = torch.sigmoid(predictions)
-                #binary_predictions = (self.probabilities > (self.threshold / 100)).squeeze(1).cpu().numpy()
-                
-                #binary_predictions = (binary_predictions * 255).astype(np.uint8)
+            pad_h = (32 - self.X_val_predict.shape[2] % 32) % 32
+            pad_w = (32 - self.X_val_predict.shape[3] % 32) % 32
+            if pad_h > 0 or pad_w > 0:
+                self.X_val_predict = torch.nn.functional.pad(self.X_val_predict, (0, pad_w, 0, pad_h))
+            
+            batch_size = 4 
+            predictions = []
+            for i in range(0, len(self.X_val_predict), batch_size):
+                batch = self.X_val_predict[i:i+batch_size]
+                with torch.no_grad():
+                    pred = self.model.predict(batch)
+                    predictions.append(pred)
+            predictions = torch.cat(predictions)
+            self.probabilities = torch.sigmoid(predictions)
         
         else:
             predictions = self.model.predict(self.eval_images_preprocessed_np)
@@ -326,17 +298,9 @@ class PredictionController:
                 self.probabilities = predictions.squeeze(-1)
             else:
                 self.probabilities = predictions.copy()
-            #binary_predictions = (self.probabilities > (self.threshold/100)).astype(np.uint8) * 255
         
         self.threshold_change(self.threshold)
 
-        """
-        self.predicitons = binary_predictions
-        
-        self.postprocess_cells(binary_predictions)
-        self.disply_current_predicted_image()
-        return binary_predictions
-        """
 
     def resize_to_original(self, segmented_images):
         resized_images = []
@@ -348,6 +312,7 @@ class PredictionController:
 
     def threshold_change(self, value):
         self.threshold = value
+
         if len(self.probabilities) > 0:
             if self.framework == PYTORCH: 
                 binary_predictions = (self.probabilities > (value/100)).squeeze(1).cpu().numpy()
@@ -356,49 +321,35 @@ class PredictionController:
             
             binary_predictions = (binary_predictions * 255).astype(np.uint8)
             
+            self.binary_predictions = binary_predictions
             self.predicitons = self.resize_to_original(binary_predictions)
             self.postprocess_cells(binary_predictions)
             self.disply_current_predicted_image()
-      
+
     def separate_cells(self, predictions):
         processed_predictions = []
         
         for i in range(len(predictions)):
             binary = predictions[i].astype(np.uint8)
             
-            #kernel = np.ones((3,3), np.uint8)
-            kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5,5))
-            opening = cv2.morphologyEx(binary, cv2.MORPH_OPEN, kernel, iterations=2)
-            
-            sure_bg = cv2.dilate(opening, kernel, iterations=3)
-            
-            dist_transform = cv2.distanceTransform(opening, cv2.DIST_L2, 5)
-            cv2.normalize(dist_transform, dist_transform, 0, 1.0, cv2.NORM_MINMAX)
-            
-            _, sure_fg = cv2.threshold(dist_transform, 0.5*dist_transform.max(), 255, 0)
-            sure_fg = sure_fg.astype(np.uint8)
-        
-            unknown = cv2.subtract(sure_bg, sure_fg)
-            
-            _, markers = cv2.connectedComponents(sure_fg)
-            markers = markers + 1
-            markers[unknown == 255] = 0
-            
-            binary_bgr = cv2.cvtColor(binary, cv2.COLOR_GRAY2BGR)
-            
-            markers = cv2.watershed(binary_bgr, markers)
-            
-            output = np.zeros_like(binary)
-            
-            for label in range(2, markers.max() + 1):
-                mask = (markers == label).astype(np.uint8)
-                
-                contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-                
-                if len(contours) > 0:
-                    area = cv2.contourArea(contours[0])
-                    if area > 30:  
-                        output[markers == label] = label * (255 // markers.max())
+            if self.current_watershed_algorithm == WatershedAlgorithm.STANDARD:
+                from backend.data.image_utils import apply_standard_watershed
+                output = apply_standard_watershed(binary)
+            elif self.current_watershed_algorithm == WatershedAlgorithm.MARKER_BASED:
+                from backend.data.image_utils import apply_marker_based_watershed
+                output = apply_marker_based_watershed(binary)
+            elif self.current_watershed_algorithm == WatershedAlgorithm.DISTANCE_TRANSFORM:
+                from backend.data.image_utils import apply_distance_transform_watershed
+                output = apply_distance_transform_watershed(binary)
+            elif self.current_watershed_algorithm == WatershedAlgorithm.H_MINIMA:
+                from backend.data.image_utils import apply_h_minima_watershed
+                output = apply_h_minima_watershed(binary)
+            elif self.current_watershed_algorithm == WatershedAlgorithm.COMPACT:
+                from backend.data.image_utils import apply_compact_watershed
+                output = apply_compact_watershed(binary)
+            else:
+                from backend.data.image_utils import apply_standard_watershed
+                output = apply_standard_watershed(binary)
             
             if np.max(output) == 0:
                 print(f"No cells detected in image {i}, using original mask")
@@ -408,13 +359,8 @@ class PredictionController:
         
         processed_predictions = np.array(processed_predictions)
         self.processed_predictions = self.resize_to_original(processed_predictions)
-
+  
     def postprocess_cells(self, predictions):
-
-        if self.model_name == "mask_rcnn":
-            predictions = np.stack([np.any(m, axis=0) for m in predictions])
-        elif self.model_name == "stardist":
-            predictions = (predictions > 0).astype(np.uint8)
 
         try:
             kernel = np.ones((3, 3), np.uint8)
@@ -422,8 +368,6 @@ class PredictionController:
             
             for pred in predictions:
                 binary = pred.astype(np.uint8)
-                #binary = cv2.morphologyEx(binary, cv2.MORPH_OPEN, kernel, iterations=1)
-                #binary = cv2.morphologyEx(binary, cv2.MORPH_CLOSE, kernel, iterations=1)
                 cleaned_predictions.append(binary)
             
             cleaned_predictions = np.array(cleaned_predictions)
@@ -445,39 +389,61 @@ class PredictionController:
             self.ui.analysis_tab.segmented_image.display_image(current_image)
 
     def label_segments(self, current_mask):
-            colored_mask = cv2.applyColorMap(current_mask, self.current_color_option)
+        
+        if current_mask.dtype != np.uint8:
+            current_mask = current_mask.astype(np.uint8)
+        colored_mask = cv2.applyColorMap(current_mask, self.current_color_option)
 
-            label_overlay = np.zeros_like(colored_mask)
+        label_overlay = np.zeros_like(colored_mask)
 
-            unique_labels = np.unique(current_mask)
-            unique_labels = unique_labels[unique_labels > 0]  
+        unique_labels = np.unique(current_mask)
+        unique_labels = unique_labels[unique_labels > 0]  
 
-            self.ui.analysis_tab.metrics_table.clear_table()           
-            id = 1
-            for label_id in unique_labels:
-                cell_mask = (current_mask == label_id).astype(np.uint8)
+        self.ui.analysis_tab.metrics_table.clear_table()           
+        id = 1
+        for label_id in unique_labels:
+            cell_mask = (current_mask == label_id).astype(np.uint8)
 
-                contours, _ = cv2.findContours(cell_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            contours, _ = cv2.findContours(cell_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
-                if len(contours) > 0:
-                    largest_contour = max(contours, key=cv2.contourArea)
-                    area = cv2.contourArea(largest_contour)
-                    M = cv2.moments(largest_contour)
+            if len(contours) > 0:
+                largest_contour = max(contours, key=cv2.contourArea)
+                area = cv2.contourArea(largest_contour)
+                perimeter = cv2.arcLength(largest_contour, True)
 
-                    if M["m00"] > 0:  
-                        cX = int(M["m10"] / M["m00"])
-                        cY = int(M["m01"] / M["m00"])
+                circularity = 0.0
+                if perimeter > 0:
+                    circularity = 4 * np.pi * area / (perimeter * perimeter)
 
-                        self.ui.analysis_tab.metrics_table.add_row([id,area])
+                M = cv2.moments(largest_contour)
 
-                        cv2.putText(label_overlay, str(id), (cX, cY), cv2.FONT_HERSHEY_SIMPLEX, 2, (255, 255, 255), 8, cv2.LINE_AA)
-                        id += 1
+                if M["m00"] > 0:  
+                    cX = int(M["m10"] / M["m00"])
+                    cY = int(M["m01"] / M["m00"])
 
-            return cv2.addWeighted(colored_mask, 0.8, label_overlay, 1.0, 0)
+                    self.ui.analysis_tab.metrics_table.add_row([id,area, round(circularity, 3)])
+
+                    cv2.putText(label_overlay, str(id), (cX, cY), cv2.FONT_HERSHEY_SIMPLEX, 2, (255, 255, 255), 8, cv2.LINE_AA)
+                    id += 1
+
+        return cv2.addWeighted(colored_mask, 0.8, label_overlay, 1.0, 0)
     
     def update_color_option(self, color):
         self.current_color_option = color
         self.disply_current_predicted_image()
+
+    def update_watershed_algorithm(self, algo):
+        self.current_watershed_algorithm  = algo
+        
+        pretrained_segmentation_models = ["stardist", "cellpose"]
+        if self.model_name in pretrained_segmentation_models:
+            popup = PopUpWidget("warning", "Watershed does not work on pretrained segmentation models!")
+            popup.show()
+            return
+
+        if len(self.binary_predictions) > 0:
+            self.postprocess_cells(self.binary_predictions)
+            self.disply_current_predicted_image()
 
     def predict_start_navigate_left(self):
         self.predict_navigate_left()  

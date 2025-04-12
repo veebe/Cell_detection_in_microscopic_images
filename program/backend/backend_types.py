@@ -11,11 +11,13 @@ class modelTypes(Enum):
 class modelFrameworks(Enum):
     KERAS = 1
     PYTORCH = 2
+    STARDIST = 3  
 
 class modelBackbones(Enum):
     RESNET34 = 1
     RESNET50 = 2
     EFFICIENTNET_B3 = 3
+    STARDIST = 4  
 
 class PredictMethods(Enum):
     UPLOADED_MODEL = 1
@@ -32,20 +34,29 @@ model_mapping = {
 
 framework_mapping = {
     "Keras": modelFrameworks.KERAS,
-    "PyTorch": modelFrameworks.PYTORCH
+    "PyTorch": modelFrameworks.PYTORCH,
+    "StarDist": modelFrameworks.STARDIST 
 }
 
 KERAS = "keras"
 PYTORCH = "pytorch"
-STARDIST = "stardist"
+STARDIST = "stardist"  
 UNKNOWN = ""
 
 backbone_mapping = {
     "Resnet34": modelBackbones.RESNET34,
     "Resnet50": modelBackbones.RESNET50,
-    "EfficientNet-B3": modelBackbones.EFFICIENTNET_B3
+    "EfficientNet-B3": modelBackbones.EFFICIENTNET_B3,
+    "StarDist": modelBackbones.STARDIST  
 }
 reverse_backbone_mapping = {v: k for k, v in backbone_mapping.items()}
+
+class WatershedAlgorithm(Enum):
+    STANDARD = "Standard Watershed"
+    MARKER_BASED = "Marker-based Watershed"
+    DISTANCE_TRANSFORM = "Distance Transform Watershed"
+    H_MINIMA = "H-Minima Watershed"
+    COMPACT = "Compact Watershed"
 
 colormap_dict = {
             "AUTUMN": cv2.COLORMAP_AUTUMN,

@@ -13,7 +13,7 @@ from frontend.widgets.combobox import ComboBoxWidget
 from frontend.widgets.label import LabelWidget, ImageLabelWidget
 from backend.backend_predict import PredictMethods
 from frontend.widgets.checkBox import CheckBoxWidget
-from backend.backend_types import colormap_dict
+from backend.backend_types import colormap_dict, WatershedAlgorithm
 
 class AnalysisTab(QWidget):
     def __init__(self):
@@ -70,7 +70,7 @@ class AnalysisTab(QWidget):
         self.pretrained_models_dropdown_label = LabelWidget("Select Pretrained model")
         self.pretrained_models_dropdown = ComboBoxWidget()
         self.pretrained_models_dropdown.addItems([
-            "Mask R-CNN", "StarDist", "DeepCell", "Cellpose", "GAN"
+            "StarDist", "Cellpose"
         ])
         self.pretrained_models_dropdown.currentIndexChanged.connect(self.update_pretrained_model_dropdown)
         self.pretrained_models_dropdown.setCurrentIndex(0)
@@ -121,6 +121,11 @@ class AnalysisTab(QWidget):
         self.threshold_slider.slider.setRange(0,100)
         self.threshold_slider.slider.setValue(50)
 
+        self.watershed_algorithm = ComboBoxWidget()
+        self.watershed_algorithm.addItems([algo.value for algo in WatershedAlgorithm])
+        self.watershed_algorithm.currentTextChanged.connect(self.update_watershed_algorithm)
+        analysis_settings_layout.addWidget(self.watershed_algorithm)
+
         self.color_options_dropdown = ComboBoxWidget()
         self.color_options_dropdown.addItems(list(colormap_dict.keys()))
         self.color_options_dropdown.setCurrentIndex(2)
@@ -149,9 +154,9 @@ class AnalysisTab(QWidget):
         splitter.addWidget(predicted_layout)
 
         self.analysis_metrics_widget = QWidget()
-        self.analysis_metrics_widget.setMaximumWidth(200)
+        self.analysis_metrics_widget.setMaximumWidth(300)
         self.analysis_metrics_layout = QVBoxLayout(self.analysis_metrics_widget)
-        self.metrics_table = TableWidget(columns=["Id","Area"], min_width=100)
+        self.metrics_table = TableWidget(columns=["Id","Area","Circularity"], min_width=100)
         self.export_button = PurpleButton(text="Export table")
         self.export_button.clicked.connect(self.export_table)
         self.analysis_metrics_layout.addWidget(self.metrics_table)
@@ -174,6 +179,12 @@ class AnalysisTab(QWidget):
     def update_color_option(self):
         color = self.color_options_dropdown.currentText()
         self.controller.predictionController.update_color_option(colormap_dict[color])
+
+    def update_watershed_algorithm(self, algorithm_name):
+        self.controller.predictionController.update_watershed_algorithm( next(
+            (algo for algo in WatershedAlgorithm if algo.value == algorithm_name), 
+            WatershedAlgorithm.STANDARD
+        ))
 
     def update_model_dropdown(self):
         framework = self.framework_dropdown.currentText()

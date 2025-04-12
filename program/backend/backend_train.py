@@ -7,7 +7,7 @@ from frontend.widgets.popUpWidget import PopUpWidget
 from backend.training.trainingProgressCallback import TrainingProgressCallback
 from PyQt5.QtWidgets import QFileDialog
 
-from backend.backend_types import modelTypes, model_mapping, PYTORCH, KERAS, STARDIST
+from backend.backend_types import modelTypes, model_mapping, PYTORCH, KERAS
 from backend.setting_classes import ModelSettings, PreprocessingSettings 
 
 
@@ -101,10 +101,7 @@ class TrainingController:
     def resize_loaded_masks(self,mask_array):
         images = []
         for img in mask_array:
-            if self.model_settings.model_framework == STARDIST:
-                img = cv2.resize(img, (self.image_width, self.image_height), interpolation=cv2.INTER_NEAREST)
-            else:
-                img = cv2.resize(img,(self.image_width,self.image_height))
+            img = cv2.resize(img,(self.image_width,self.image_height))
             images.append(img)
         return np.array(images)[..., np.newaxis]
     
@@ -170,16 +167,7 @@ class TrainingController:
         self.loaded_mask_array_processed = self.resize_loaded_masks(self.loaded_mask_array)
 
         images = self.loaded_image_array_processed.astype(np.float32)  
-        if self.model_settings.model_framework == STARDIST:
-            from scipy.ndimage import label
-
-            labeled_masks = np.zeros_like(self.loaded_mask_array_processed, dtype=np.uint16)
-            for i, mask in enumerate(self.loaded_mask_array_processed):
-                labeled_mask, _ = label(mask > 128)  
-                labeled_masks[i] = labeled_mask
-            masks = labeled_masks
-        else:
-            masks = (self.loaded_mask_array_processed > 128).astype(np.float32)
+        masks = (self.loaded_mask_array_processed > 128).astype(np.float32)
 
         indices = np.arange(len(images))
         val_split = self.model_settings.val_split/100
@@ -222,7 +210,7 @@ class TrainingController:
         if self.ui.training_tab.test_set_visible:
             self.test_loaded_image_array_processed = self.resize_loaded_images(self.apply_prerocessing(self.test_loaded_image_array))
             test_images = self.test_loaded_image_array_processed.astype(np.float32)
-            test_images = preprocess_input(test_images) if self.model_settings.model_framework != STARDIST else test_images
+            test_images = preprocess_input(test_images) 
             self.X_val_predict = test_images
         else:
             max_index = len(self.val_indices) - 1
@@ -236,28 +224,9 @@ class TrainingController:
         elif self.model_settings.model_framework == PYTORCH:
             from backend.models.pytorch import PyTorchModel
             self.model = PyTorchModel(model_type=self.model_settings.model_type,backbone=self.model_settings.model_backbone, input_size=(self.image_height,self.image_width))
-        elif self.model_settings.model_framework == STARDIST:
-            from backend.models.stardist import StarDistModel
-            self.model = StarDistModel(input_size=(self.image_height,self.image_width))
 
         self.model.compile()
         self.model.epochs = self.model_settings.epochs
-
-        if self.model_settings.model_framework == STARDIST:
-            y_train = np.squeeze(y_train, axis=-1)
-            y_val = np.squeeze(y_val, axis=-1)
-            self.model.batch_size = self.model_settings.batch
-
-            from backend.training.trainingThreadStarDist import TrainingThreadStarDist
-            self.training_thread = TrainingThreadStarDist(
-                model=self.model,
-                X_train=X_train,
-                Y_train=y_train,
-                X_val=X_val,
-                Y_val=y_val,
-                callbacks=[self.callback]
-            )
-            self.training_thread.start()
 
         if self.model_settings.model_framework == PYTORCH:
             from torch.utils.data import TensorDataset, DataLoader
