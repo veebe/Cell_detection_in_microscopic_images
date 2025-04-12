@@ -1,5 +1,4 @@
 from PyQt5.QtWidgets import QCheckBox
-from PyQt5.QtCore import Qt
 
 class CheckBoxWidget(QCheckBox):
     def __init__(self, text="", parent=None):

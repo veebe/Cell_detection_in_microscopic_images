@@ -1,12 +1,10 @@
-from PyQt5.QtWidgets import (QDialog, QVBoxLayout, QLabel, QComboBox, QSlider, QHBoxLayout, QWidget,
-                             QCheckBox, QSpinBox, QPushButton, QFormLayout, QGridLayout,QSizePolicy)
+from PyQt5.QtWidgets import QDialog, QVBoxLayout, QLabel, QHBoxLayout, QWidget, QFormLayout, QSizePolicy
 from PyQt5.QtGui import QPixmap, QImage
 from PyQt5.QtCore import Qt, QEvent
 from frontend.widgets.label import LabelWidget
 from frontend.widgets.slider import SliderWidget
 from frontend.widgets.combobox import ComboBoxWidget
 from frontend.widgets.button import PurpleButton
-from frontend.widgets.spinBox import SpinBoxWidget
 from frontend.widgets.tabs import TabWidget
 from frontend.widgets.checkBox import CheckBoxWidget
 from frontend.widgets.splitter import SplitterWidget

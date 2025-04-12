@@ -1,6 +1,5 @@
-from PyQt5.QtWidgets import QWidget, QVBoxLayout, QLabel, QTabWidget, QApplication
+from PyQt5.QtWidgets import QWidget, QVBoxLayout, QApplication
 from frontend.ui_training import TrainingTab  
-from PyQt5.QtCore import Qt
 from frontend.widgets.tabs import TabWidget
 from frontend.ui_analysis import AnalysisTab
 

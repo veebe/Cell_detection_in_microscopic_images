@@ -17,17 +17,17 @@ def progress_updater(shared_state):
     shared_state.status.value = b"Loading UI components..."
     import random
     while not shared_state.frontend_loaded.value:
-        if current_progress < 48:
+        if current_progress < 30:
             current_progress += random.randint(0, 3)
             shared_state.progress.value = current_progress
         time.sleep(0.2)
     
-    shared_state.progress.value = 50
+    shared_state.progress.value = 33
     shared_state.status.value = b"Loading application backend..."
-    current_progress = 50
+    current_progress = 33
     
     while not shared_state.backend_loaded.value:
-        if current_progress < 98:
+        if current_progress < 97:
             current_progress += random.randint(0, 3)
             shared_state.progress.value = current_progress
         time.sleep(0.2)

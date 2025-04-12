@@ -1,5 +1,6 @@
 from PyQt5.QtWidgets import QWidget, QVBoxLayout, QTableWidget, QTableWidgetItem, QHeaderView
 from PyQt5.QtCore import Qt
+from frontend.widgets.button import PurpleButton
 
 class NumericTableWidgetItem(QTableWidgetItem):
     def __init__(self, text):
@@ -55,6 +56,10 @@ class TableWidget(QWidget):
         header.setSectionResizeMode(QHeaderView.Stretch)
 
         self.layout.addWidget(self.table)
+        self.export_button = PurpleButton(text="Export table")
+        self.export_button.clicked.connect(self.export_table)
+        self.export_button.setToolTip("Export table to xlsx")  
+        self.layout.addWidget(self.export_button)
         self.setLayout(self.layout)
 
     def set_item(self, row, col, value):
@@ -85,3 +90,7 @@ class TableWidget(QWidget):
             if item:
                 values.append(item.text())
         return values
+    
+    def export_table(self):
+        from backend.data.excel_utils import export_to_excel
+        export_to_excel(self.table)

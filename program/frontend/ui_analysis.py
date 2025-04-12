@@ -1,18 +1,13 @@
-from PyQt5.QtWidgets import QWidget, QVBoxLayout, QLabel, QHBoxLayout, QSizePolicy, QToolTip, QPushButton, QSplitter, QDialog, QFormLayout, QFileDialog
+from PyQt5.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QSizePolicy, QToolTip, QDialog, QFormLayout, QFileDialog
 from PyQt5.QtCore import QSize, Qt
-from PyQt5.QtGui import QColor
 from frontend.widgets.button import PurpleButton
 from frontend.widgets.dragDrop import DragDropWidget
-from frontend.widgets.plot import PlotWidget
 from frontend.widgets.table import TableWidget
-from frontend.widgets.processBar import ProgressBarWidget
 from frontend.widgets.icon import IconButtonWidget
 from frontend.widgets.splitter import SplitterWidget
 from frontend.widgets.slider import SliderWidget
 from frontend.widgets.combobox import ComboBoxWidget
 from frontend.widgets.label import LabelWidget, ImageLabelWidget
-from backend.backend_predict import PredictMethods
-from frontend.widgets.checkBox import CheckBoxWidget
 from backend.backend_types import colormap_dict, WatershedAlgorithm
 
 class AnalysisTab(QWidget):
@@ -42,7 +37,7 @@ class AnalysisTab(QWidget):
 
         self.framework_label = LabelWidget("Select Framework:")
         self.framework_dropdown = ComboBoxWidget()
-        self.framework_dropdown.addItems(["Keras", "PyTorch", "StarDist"])
+        self.framework_dropdown.addItems(["Keras", "PyTorch"])
         self.framework_dropdown.currentIndexChanged.connect(self.update_model_dropdown)
 
         self.model_label = LabelWidget("Select Model:")
@@ -53,7 +48,7 @@ class AnalysisTab(QWidget):
 
         self.image_size_label = LabelWidget("Select image size:")
         self.image_size_dropdown = ComboBoxWidget()
-        self.image_size_dropdown.addItems(["64x64", "128x128", "224x224", "256x256","512x512"])
+        self.image_size_dropdown.addItems(["64x64", "128x128", "224x224", "256x256","512x512","1024x1024"])
         self.image_size_dropdown.setCurrentIndex(2)
         
         weight_form_layout = QFormLayout()
@@ -157,10 +152,7 @@ class AnalysisTab(QWidget):
         self.analysis_metrics_widget.setMaximumWidth(300)
         self.analysis_metrics_layout = QVBoxLayout(self.analysis_metrics_widget)
         self.metrics_table = TableWidget(columns=["Id","Area","Circularity"], min_width=100)
-        self.export_button = PurpleButton(text="Export table")
-        self.export_button.clicked.connect(self.export_table)
         self.analysis_metrics_layout.addWidget(self.metrics_table)
-        self.analysis_metrics_layout.addWidget(self.export_button)
         splitter2 = SplitterWidget(Qt.Horizontal)
         splitter2.addWidget(splitter)
         splitter2.addWidget(self.analysis_metrics_widget)
@@ -171,10 +163,6 @@ class AnalysisTab(QWidget):
         super().showEvent(event)
         self.update_pretrained_model_dropdown()
         self.update_method_dropdown()
-
-    def export_table(self):
-        from backend.data.excel_utils import export_to_excel
-        export_to_excel(self.metrics_table.table)
 
     def update_color_option(self):
         color = self.color_options_dropdown.currentText()
@@ -230,25 +218,24 @@ class AnalysisTab(QWidget):
                 self.controller.predictionController.save_settings(self.settings_values)
 
     def update_pretrained_model_dropdown(self):
-        self.controller.predictionController.model_selected = self.pretrained_models_dropdown.currentText().lower()
+        self.controller.predictionController.set_model_selected(self.pretrained_models_dropdown.currentText())
 
     def update_method_dropdown(self):
         if self.method_dropdown.currentText() == "Uploaded model":
             self.upload_model_widget.setVisible(True)
             self.upload_weights_widget.setVisible(False)
-            self.select_pretrained_widget.setVisible(False)
-            self.controller.predictionController.predict_method = PredictMethods.UPLOADED_MODEL
+            self.select_pretrained_widget.setVisible(False)   
         elif self.method_dropdown.currentText() == "Uploaded weights":
             self.update_model_dropdown()
             self.upload_model_widget.setVisible(False)
             self.upload_weights_widget.setVisible(True)
             self.select_pretrained_widget.setVisible(False)
-            self.controller.predictionController.predict_method = PredictMethods.UPLOADED_WEIGHTS
         elif self.method_dropdown.currentText() == "Pretrained model":
             self.upload_model_widget.setVisible(False)
             self.upload_weights_widget.setVisible(False)
             self.select_pretrained_widget.setVisible(True)
-            self.controller.predictionController.predict_method = PredictMethods.SELECTED_MODEL
+
+        self.controller.predictionController.set_predict_method(self.method_dropdown.currentText())
 
     def upload_model(self):
         file_path, _ = QFileDialog.getOpenFileName(self, "Upload Model", "", "Model Files (*.h5 *.pt *.pth *.keras)")
@@ -275,6 +262,7 @@ class AnalysisTab(QWidget):
             self.image_slider.slider.setValue(0)
             if widget == self.eval_images_drop:
                 self.controller.predictionController.eval_image_paths = files
+                self.controller.predictionController.set_eval_images(files)
 
     def upload_updated_weights_settings(self):
         self.controller.predictionController.weights_uploaded_model_settings.model_framework = self.framework_dropdown.currentText().lower()

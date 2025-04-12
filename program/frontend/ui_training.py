@@ -1,6 +1,5 @@
-from PyQt5.QtWidgets import QWidget, QVBoxLayout, QLabel, QHBoxLayout, QSizePolicy, QToolTip, QPushButton, QSplitter, QDialog
+from PyQt5.QtWidgets import QWidget, QVBoxLayout, QLabel, QHBoxLayout, QSizePolicy, QToolTip, QDialog
 from PyQt5.QtCore import QSize, Qt
-from PyQt5.QtGui import QColor
 from frontend.widgets.button import PurpleButton
 from frontend.widgets.dragDrop import DragDropWidget
 from frontend.widgets.plot import PlotWidget
@@ -24,7 +23,6 @@ class TrainingTab(QWidget):
 
         self.left_container = QWidget()
         self.left_layout = QVBoxLayout(self.left_container)
-        #layout.addLayout(self.left_layout)
         
         drops_horizontal_layout = QHBoxLayout()
         self.left_layout.addLayout(drops_horizontal_layout)
@@ -111,7 +109,6 @@ class TrainingTab(QWidget):
         
 
         self.middle_layout = QVBoxLayout(self.middle_container)
-        #layout.addLayout(self.middle_layout)
 
         model_settings_layout = QHBoxLayout()
 
@@ -121,7 +118,7 @@ class TrainingTab(QWidget):
         self.model_settings_button.setIconSize(QSize(20, 20))
 
         self.image_size_dropdown = ComboBoxWidget()
-        self.image_size_dropdown.addItems(["64x64", "128x128", "224x224", "256x256","512x512"])
+        self.image_size_dropdown.addItems(["64x64", "128x128", "224x224", "256x256","512x512","1024x1024"])
         self.image_size_dropdown.setCurrentIndex(2)
         self.image_size_label = LabelWidget("Select training image size:")
         

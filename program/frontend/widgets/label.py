@@ -1,6 +1,5 @@
-from PyQt5.QtWidgets import QLabel, QMessageBox
-import os
-from PyQt5.QtGui import QPixmap, QDragEnterEvent, QDropEvent
+from PyQt5.QtWidgets import QLabel
+from PyQt5.QtGui import QPixmap
 import cv2
 from PyQt5.QtGui import QImage
 import numpy as np
