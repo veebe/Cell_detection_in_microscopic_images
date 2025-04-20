@@ -140,42 +140,29 @@ def apply_marker_based_watershed(binary):
 def apply_distance_transform_watershed(binary):
     import cv2
     import numpy as np
+    from skimage.feature import peak_local_max
+    from scipy import ndimage as ndi
+    from skimage.segmentation import watershed
     
     binary = binary.astype(np.uint8)
-    
+
     dist = cv2.distanceTransform(binary, cv2.DIST_L2, 5)
-    
-    dist_normalized = cv2.normalize(dist, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
-    
-    dist_blur = cv2.GaussianBlur(dist_normalized, (5, 5), 0)
-    
-    kernel = np.ones((5, 5), np.uint8)
-    dilated = cv2.dilate(dist_blur, kernel)
-    
-    local_max = (dist_normalized >= dilated - 2) & (dist_normalized > 30)
-    local_max = local_max.astype(np.uint8) * 255
-    
-    kernel = np.ones((3, 3), np.uint8)
-    local_max = cv2.morphologyEx(local_max, cv2.MORPH_OPEN, kernel)
-    
-    _, markers = cv2.connectedComponents(local_max)
-    markers = markers + 1
-    
-    markers[binary == 0] = 0
-    
-    img_color = cv2.cvtColor(binary, cv2.COLOR_GRAY2BGR)
-    markers = cv2.watershed(img_color, markers)
-    
-    output = np.zeros_like(binary)
-    
-    for label in range(2, markers.max() + 1):
-        mask = (markers == label).astype(np.uint8)
+
+    dist_normalized = cv2.normalize(dist, None, 0, 1.0, cv2.NORM_MINMAX)
+
+    local_max = peak_local_max(dist, min_distance=10, labels=binary, footprint=np.ones((3, 3)), exclude_border=False)
+    markers = np.zeros_like(dist, dtype=np.int32)
+    for i, (r, c) in enumerate(local_max):
+        markers[r, c] = i + 1
+
+    labels = watershed(-dist, markers, mask=binary)
+
+    output = np.zeros_like(binary, dtype=np.uint8)
+    for label in range(1, labels.max() + 1):
+        mask = (labels == label).astype(np.uint8)
         contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-        
-        if len(contours) > 0:
-            area = cv2.contourArea(contours[0])
-            if area > 10:  
-                output[markers == label] = label * (255 // markers.max())
+        if contours and cv2.contourArea(contours[0]) > 30:
+            output[labels == label] = label * (255 // labels.max())
     
     return output
 
