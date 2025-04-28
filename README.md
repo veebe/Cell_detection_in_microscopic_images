@@ -9,15 +9,33 @@ This application detects and segments cells in microscopic images using deep lea
 - **Real-Time Preview**: Click and hold and watch your segmented images move in time.
 - **Watershed Algorithm**: Additional algorithms for segmentation, custom tresholding.
 
-## Installation
-### Requirements
-- Python 3.8+
-- PyTorch
-- TensorFlow/Keras
-- OpenCV
-- Qt for GUI
-- NumPy, Matplotlib
-- more (I will create requirements.txt with everything needed)
+
+## 🚀 Installation
+
+1. **Clone the repository**
+   ```
+   git clone https://github.com/veebe/Cell_detection_in_microscopic_images.git
+   ```
+   navigate to the cloned directory and create a virtual enviroment
+   ```
+   python -m venv venv
+   .\venv\Scripts\activate
+   ```
+   install the requirements using
+   ```
+   pip install -r requirements.txt
+   ```
+   ⚠️ WARNING ⚠️ - you also need to have nvidia CUDA toolkit installed for PyTorch and TensorFlow to work properly, download the CUDA toolkit from provided site https://developer.nvidia.com/cuda-downloads
+   for PyTorch you need to go to https://pytorch.org and select the installation based on your requirements. On my machine that was
+   ```
+   pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu126
+   ```
+   🚨 DISCLAIMER 🚨 - the application has been build mainly for the CUDA platform, other platforms may or may not work (they have not been tested!)
+
+   if all installs completed succesfully, you can run the main.py that is located in the /program directory
+   ```
+   python .\program\main.py
+   ```
 
 ## Usage
 ### Training
@@ -32,9 +50,10 @@ This application detects and segments cells in microscopic images using deep lea
 1. Load a microscopic images.
 2. Select detection method.
       * Load the selected detection model, weights or select one from the pretrained models.
-4. Choose preprocessing options (denoising, thresholding, etc.).
+4. Choose preprocessing options (blur, contrast, etc.).
 6. Run the detection process.
-7. View the segmented image and masks.
+7. Play with the treshold and watershed methods to get the expected result
+8. View the segmented image and masks.
 
 ## License
 closed source
