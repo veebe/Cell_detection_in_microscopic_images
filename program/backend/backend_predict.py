@@ -80,6 +80,7 @@ class PredictionController:
             self.ui.analysis_tab.metrics_table.clear_table()
             for row_data in metrics_data:
                 self.ui.analysis_tab.metrics_table.add_row(row_data)
+            self.ui.analysis_tab.metrics_table.apply_sorting()
     
     # Color option update
     def update_color_option(self, color):
@@ -102,6 +103,7 @@ class PredictionController:
             self.ui.analysis_tab.metrics_table.clear_table()
             for row_data in metrics_data:
                 self.ui.analysis_tab.metrics_table.add_row(row_data)
+            self.ui.analysis_tab.metrics_table.apply_sorting()
     
     # Threshold change
     def threshold_change(self, value):
@@ -115,6 +117,7 @@ class PredictionController:
             self.ui.analysis_tab.metrics_table.clear_table()
             for row_data in metrics_data:
                 self.ui.analysis_tab.metrics_table.add_row(row_data)
+            self.ui.analysis_tab.metrics_table.apply_sorting()
     
     # Navigation methods
     def predict_start_navigate_left(self):

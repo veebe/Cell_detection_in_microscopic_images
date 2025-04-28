@@ -12,11 +12,22 @@ class TrainingThreadKeras(QThread):
 
     def run(self):
         try:
+            from keras._tf_keras.keras.callbacks import ReduceLROnPlateau
+            callbacks_list = [
+                self.callbacks,
+                ReduceLROnPlateau(
+                    monitor='val_loss', 
+                    factor=0.5, 
+                    patience=3, 
+                    min_lr=0.00001
+                )
+            ]
+
             history = self.model.fit(
                 self.training_data,
                 epochs=self.epochs,
                 validation_data=self.validation_data,
-                callbacks=[self.callbacks],
+                callbacks=callbacks_list,
                 verbose=0,
                 shuffle=False 
             )

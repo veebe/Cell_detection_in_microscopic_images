@@ -22,6 +22,8 @@ class TableWidget(QWidget):
 
         self.layout = QVBoxLayout(self)
         self.numeric_columns = set()  
+        self.sort_column = 0  
+        self.sort_order = Qt.AscendingOrder  
 
         self.table = QTableWidget()
         self.table.setColumnCount(len(columns))
@@ -30,6 +32,8 @@ class TableWidget(QWidget):
         self.table.setEditTriggers(QTableWidget.NoEditTriggers)
         self.table.verticalHeader().setVisible(False)
         self.table.setSortingEnabled(True)
+        
+        self.table.horizontalHeader().sortIndicatorChanged.connect(self.on_sort_changed)
 
         self.table.setStyleSheet("""
             QTableWidget {
@@ -61,6 +65,10 @@ class TableWidget(QWidget):
         self.export_button.setToolTip("Export table to xlsx")  
         self.layout.addWidget(self.export_button)
         self.setLayout(self.layout)
+    
+    def on_sort_changed(self, column, order):
+        self.sort_column = column
+        self.sort_order = order
 
     def set_item(self, row, col, value):
         try:
@@ -80,8 +88,23 @@ class TableWidget(QWidget):
             self.set_item(row, col, value)
 
     def clear_table(self):
+        # Remember the current sorting settings
+        header = self.table.horizontalHeader()
+        self.sort_column = header.sortIndicatorSection()
+        self.sort_order = header.sortIndicatorOrder()
+        
+        was_sorting_enabled = self.table.isSortingEnabled()
+        self.table.setSortingEnabled(False)
+        
         self.table.setRowCount(0)
-        self.numeric_columns.clear()
+        
+        self._was_sorting_enabled = was_sorting_enabled
+    
+    def apply_sorting(self):
+        if hasattr(self, '_was_sorting_enabled') and self._was_sorting_enabled:
+            self.table.horizontalHeader().setSortIndicator(self.sort_column, self.sort_order)
+            self.table.setSortingEnabled(True)
+            delattr(self, '_was_sorting_enabled')
 
     def get_column_values(self, column):
         values = []

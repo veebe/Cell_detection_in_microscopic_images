@@ -1,7 +1,7 @@
 import os
 from PyQt5.QtGui import QPixmap, QDragEnterEvent, QDropEvent
 import cv2
-from PyQt5.QtWidgets import QLabel, QMessageBox
+from PyQt5.QtWidgets import QLabel, QMessageBox, QFileDialog
 from PyQt5.QtGui import QImage
 from PyQt5.QtCore import Qt
 
@@ -18,7 +18,13 @@ class DragDropWidget(QLabel):
             font-weight: bold;                    
         """)
         self.drop_handler = drop_handler 
-        self.original_pixmap = None  
+        self.original_pixmap = None
+        self.setCursor(Qt.PointingHandCursor)
+        
+    def mousePressEvent(self, event):
+        if event.button() == Qt.LeftButton:
+            self.open_file_dialog()
+        super().mousePressEvent(event)
 
     def dragEnterEvent(self, event: QDragEnterEvent):
         if event.mimeData().hasUrls():
@@ -27,18 +33,36 @@ class DragDropWidget(QLabel):
     def dropEvent(self, event: QDropEvent):
         files = [url.toLocalFile() for url in event.mimeData().urls()]
         if files:
-            if os.path.isdir(files[0]):
-                folder_path = files[0]
-                image_files = self.get_image_files_from_folder(folder_path)
-                if image_files:
-                    self.display_image(image_files[0]) 
-                    self.drop_handler(image_files, self)
-                else:
-                    QMessageBox.warning(self, "No Images", "The folder does not contain any supported image files.")
-            else:
-                self.display_image(files[0])  
-                self.drop_handler(files, self) 
+            self.process_files(files)
         event.acceptProposedAction()
+    
+    def open_file_dialog(self):
+        file_filter = "Images (*.png *.jpg *.jpeg *.bmp *.gif *.tiff *.tif);;All Files (*)"
+        files, _ = QFileDialog.getOpenFileNames(
+            self, 
+            "Select Images", 
+            "", 
+            file_filter
+        )
+        
+        if files:
+            self.process_files(files)
+    
+    def process_files(self, files):
+        files.sort()
+        
+        if os.path.isdir(files[0]):
+            folder_path = files[0]
+            image_files = self.get_image_files_from_folder(folder_path)
+            if image_files:
+                image_files.sort()
+                self.display_image(image_files[0]) 
+                self.drop_handler(image_files, self)
+            else:
+                QMessageBox.warning(self, "No Images", "The folder does not contain any supported image files.")
+        else:
+            self.display_image(files[0])  
+            self.drop_handler(files, self)
     
     def resizeEvent(self, event):
         self.update_display_size()

@@ -404,14 +404,6 @@ class PredictionModel:
         result = cv2.addWeighted(colored_mask, 0.8, label_overlay, 1.0, 0)
         return result, metrics_data
     
-    def update_color_option(self, color):
-        self.current_color_option = color
-        # Return new image with updated color option
-        if len(self.processed_predictions) > 0:
-            current_mask = self.processed_predictions[self.preview_image_index]
-            return self.label_segments(current_mask)
-        return None, []
-
     def update_watershed_algorithm(self, algo):
         self.current_watershed_algorithm = algo
         

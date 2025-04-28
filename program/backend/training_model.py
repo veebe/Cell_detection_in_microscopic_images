@@ -156,6 +156,8 @@ class TrainingModel:
                 pretrained='imagenet'
             )
         elif self.model_settings.model_framework == KERAS:
+            import os
+            os.environ["SM_FRAMEWORK"] = "tf.keras"
             import segmentation_models as sm
             preprocess_input = sm.get_preprocessing(self.model_settings.model_backbone)
 
@@ -177,7 +179,7 @@ class TrainingModel:
         if self.model_settings.model_framework == KERAS:
             from backend.models.keras import KerasModel
             self.model = KerasModel(backbone=self.model_settings.model_backbone,
-                                   input_size=(self.image_height, self.image_height, 3))
+                                   input_size=(self.image_height, self.image_width, 3))
         elif self.model_settings.model_framework == PYTORCH:
             from backend.models.pytorch import PyTorchModel
             self.model = PyTorchModel(model_type=self.model_settings.model_type,
@@ -199,8 +201,8 @@ class TrainingModel:
             A.HorizontalFlip(p=0.5),
             A.VerticalFlip(p=0.5),
             A.RandomResizedCrop(
-                height=256,
-                width=256,
+                height=self.image_height,
+                width=self.image_width,
                 scale=(0.9, 1.0),
                 ratio=(0.75, 1.33),
                 interpolation=cv2.INTER_LINEAR, 
@@ -220,12 +222,25 @@ class TrainingModel:
     
     def setup_keras_training(self, X_train, y_train):
         from keras._tf_keras.keras.preprocessing.image import ImageDataGenerator
-        
+        """
         datagen = ImageDataGenerator(
             rotation_range=15,
             horizontal_flip=True,
             vertical_flip=True,
             zoom_range=0.1
+        )
+        """
+        datagen = ImageDataGenerator(
+            rotation_range=30,         
+            width_shift_range=0.15,    
+            height_shift_range=0.15,   
+            shear_range=0.1,           
+            zoom_range=0.2,            
+            horizontal_flip=True,      
+            vertical_flip=True,
+            fill_mode='nearest',       
+            brightness_range=[0.7, 1.3],
+            channel_shift_range=0.1,   
         )
         
         train_generator = datagen.flow(

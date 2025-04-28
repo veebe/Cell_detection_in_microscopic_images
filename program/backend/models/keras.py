@@ -1,4 +1,6 @@
 import json
+import os
+os.environ["SM_FRAMEWORK"] = "tf.keras"
 import segmentation_models as sm
 import tensorflow as tf
 from keras._tf_keras.keras.optimizers import Adam
@@ -28,8 +30,20 @@ class KerasModel(BaseModel):
         }
 
     def compile(self, optimizer="adam", loss="binary_crossentropy"):
-        opt = Adam() if optimizer == "adam" else tf.keras.optimizers.SGD(learning_rate=0.01)
-        self.model.compile(optimizer=opt, loss=loss, metrics=["accuracy"])
+        if optimizer == "adam":
+            opt = Adam(learning_rate=0.0001)
+        else:
+            from keras._tf_keras.keras.optimizers import SGD
+            opt = SGD(learning_rate=0.001, momentum=0.9)
+
+        from keras._tf_keras.keras import metrics
+        self.model.compile(
+            optimizer=opt, 
+            loss=loss, 
+            metrics=["accuracy", metrics.IoU(num_classes=2, target_class_ids=[1])]
+        )
+
+        #self.model.compile(optimizer=opt, loss=loss, metrics=["accuracy"])
 
     def _train(self, train_data, val_data, batch_size=16, callbacks=None):
         self.thread = TrainingThreadKeras(
