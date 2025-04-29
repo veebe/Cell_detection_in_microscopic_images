@@ -42,7 +42,7 @@ This application detects and segments cells in microscopic images using deep lea
         * Use their configuration tool to select your OS, `Pip`, Python, and importantly, the **CUDA version** you installed (e.g., CUDA 12.6, CUDA 11.8).
         * Copy and run the generated `pip install` command. It will look something like this ( **do not copy this example directly, use the one generated for *your* system!** ):
             ```bash
-            # Example for CUDA 12.1 - Use the command from the PyTorch website!
+            # Example for CUDA 12.6 - Use the command from the PyTorch website!
             pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu126
             ```
     * 🚨 **Platform Disclaimer**: This application has been primarily developed and tested on systems with NVIDIA GPUs using CUDA. Functionality on other platforms (CPU-only, AMD GPUs) is not guaranteed and has not been tested.
